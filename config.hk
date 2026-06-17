@@ -1,1 +1,167 @@
+! ===========================================================================
+! HackerOS Kernel - config.hk
+! Glowny plik konfiguracyjny build systemu jadra
+! Format: .hk (https://hackeros-linux-system.github.io/HackerOS-Website/tools-docs/hk.html)
+! ===========================================================================
 
+[metadata]
+-> name        => HackerOS Kernel
+-> codename    => Wolfsbane
+-> branch      => cybersecurity
+-> maintainer  => HackerOS Linux System <hackeros068@gmail.com>
+-> homepage    => https://hackeros-linux-system.github.io/HackerOS-Website/
+-> license     => GPL-2.0
+-> description => Zmodyfikowane jadro Linux dla HackerOS Cybersecurity Edition
+
+! ---------------------------------------------------------------------------
+! Zrodlo jadra (vanilla Linux). Build.lua sciaga ten tarball i nadpisuje go
+! patchami z patches/. Domyslnie: 7.1 - skrypt sam wykrywa nowsze wersje
+! z kernel.org, jesli "auto_latest" jest true.
+! ---------------------------------------------------------------------------
+[source]
+-> base_version    => 7.1
+-> auto_latest     => true
+-> min_version     => 7.1
+-> mirror          => https://cdn.kernel.org/pub/linux/kernel/v${source.major}.x/
+-> major           => 7
+-> tarball_pattern => linux-${source.base_version}.tar.xz
+-> sha_check       => true
+
+[target]
+-> arch         => x86_64
+-> distro       => debian
+-> distro_base  => testing
+-> format       => deb
+-> bootloader   => grub2
+-> init_systems => ["systemd"]
+
+! ---------------------------------------------------------------------------
+! Pakiet .deb - nazwy, sekcje, zaleznosci
+! ---------------------------------------------------------------------------
+[package]
+-> name             => hackeros-kernel-cybersecurity
+-> section          => kernel
+-> priority         => optional
+-> architecture     => amd64
+-> conflicts        => ["linux-image-amd64", "linux-image-*-amd64"]
+-> replaces         => ["linux-image-amd64"]
+-> provides         => ["linux-image", "linux-image-amd64"]
+-> depends          => ["initramfs-tools | dracut", "kmod", "grub-pc | grub-efi-amd64"]
+-> recommends       => ["xen-hypervisor-4.20-amd64", "hackeros-cybersecurity-tools"]
+-> set_default      => true
+-> remove_old_kernel => true
+-> postinst_grub_update => true
+
+! ---------------------------------------------------------------------------
+! Wersjonowanie pakietu .deb
+! ---------------------------------------------------------------------------
+[versioning]
+-> kernel_suffix     => hackeros-cybersec
+-> abi_tag           => hk1
+-> deb_version       => ${source.base_version}-${versioning.abi_tag}
+-> uname_suffix      => -${versioning.kernel_suffix}
+
+! ---------------------------------------------------------------------------
+! Konfiguracja kompilacji (.config jadra)
+! ---------------------------------------------------------------------------
+[build]
+-> jobs            => auto
+-> compiler        => gcc
+-> use_ccache      => true
+-> output          => ./dist
+-> base_config     => config/base.config
+-> fragments_dir   => config/fragments
+-> localmodconfig  => false
+-> strip_modules   => true
+-> build_dir       => ./build
+-> log_dir         => ./logs
+
+! ---------------------------------------------------------------------------
+! Patche nakladane w kolejnosci (fork patchset HackerOS Cybersecurity)
+! ---------------------------------------------------------------------------
+[patches]
+-> dir          => ./patches
+-> apply_order  => [
+  "0001-hackeros-branding.patch",
+  "0002-hardened-memory-protections.patch",
+  "0003-grsecurity-inspired-restrictions.patch",
+  "0004-xen-dom0-cybersec-tuning.patch",
+  "0005-network-forensics-hooks.patch",
+  "0006-syscall-auditing-extended.patch",
+  "0007-randomize-kstack-default-on.patch",
+  "0008-disable-legacy-debug-interfaces.patch"
+  ]
+-> fail_on_reject => true
+
+! ---------------------------------------------------------------------------
+! Hardening / cybersecurity - flagi wysokiego poziomu, mapowane na CONFIG_*
+! przez build.lua na fragmenty .config w config/fragments/
+! ---------------------------------------------------------------------------
+[hardening]
+-> kaslr                  => true
+-> stack_protector_strong  => true
+-> fortify_source          => true
+-> randomize_kstack_offset => true
+-> slab_freelist_hardened  => true
+-> page_table_isolation    => true
+-> retpoline                => true
+-> lockdown_mode            => confidentiality
+-> module_sig                => true
+-> module_sig_force          => false
+-> bpf_jit_hardening        => true
+-> debug_fs                 => false
+-> dev_mem                  => false
+-> kexec                    => false
+-> seccomp                  => true
+-> selinux                  => false
+-> apparmor                => true
+-> audit                    => true
+-> integrity_appraisal      => true
+
+! ---------------------------------------------------------------------------
+! Wsparcie dla Xen (hypervisor juz obecny w HackerOS Cybersecurity Edition)
+! ---------------------------------------------------------------------------
+[xen]
+-> enabled       => true
+-> dom0_support  => true
+-> domu_support  => true
+-> pv_support    => true
+-> hvm_support   => true
+-> pci_passthrough => true
+-> blkback        => true
+-> netback        => true
+
+! ---------------------------------------------------------------------------
+! Moduly / podsystemy istotne dla cybersecurity (pentesting, forensics, sniffing)
+! ---------------------------------------------------------------------------
+[cybersecurity_subsystems]
+-> netfilter_full        => true
+-> nf_tables              => true
+-> packet_socket          => true
+-> usb_monitor            => true
+-> tcp_md5                => true
+-> wireless_injection     => true
+-> bluetooth_monitor       => true
+-> ebpf_tracing            => true
+-> kprobes                 => true
+-> ftrace                  => true
+-> crypto_user_api         => true
+-> dm_crypt                => true
+-> dm_verity                => true
+-> tpm_support              => true
+-> ima_evm                  => true
+
+[paths]
+-> src_dir      => ./src
+-> kernel_src   => ${paths.src_dir}/linux
+-> deb_workdir  => ./debian-build
+-> output_deb   => ${build.output}/${package.name}_${versioning.deb_version}_${target.architecture}.deb
+
+[signing]
+-> sign_modules    => false
+-> sign_package    => false
+-> gpg_key_id       => ""
+
+! ===========================================================================
+! Koniec config.hk
+! ===========================================================================
