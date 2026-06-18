@@ -1,0 +1,32 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 8/8] hackeros: wylaczenie przestarzalych interfejsow debug
+
+Dodaje znacznik potwierdzajacy intencjonalne wylaczenie
+historycznie podatnych interfejsow /dev/kmem i /dev/mem w
+domyslnej konfiguracji HackerOS Kernel (cybersecurity), zgodnie
+z fragmentem .config generowanym przez kconfig.lua.
+
+---
+ drivers/char/mem.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+--- a/drivers/char/mem.c
++++ b/drivers/char/mem.c
+@@ -789,3 +789,15 @@
+ }
+ 
+ fs_initcall(chr_dev_init);
++
++#ifdef CONFIG_HACKEROS_KERNEL
++/*
++ * HackerOS Cybersecurity: /dev/kmem i /dev/mem byly historycznie
++ * wektorem eskalacji uprawnien (arbitralny odczyt/zapis pamieci
++ * jadra przez uprzywilejowany, ale podatny na eskalacje, proces).
++ * Ten znacznik jest uzywany przez build.lua/kconfig.lua jako
++ * potwierdzenie, ze CONFIG_DEVKMEM=n i CONFIG_DEVMEM=n sa wymuszane
++ * na poziomie generowanego fragmentu .config dla tej konfiguracji.
++ */
++static const bool hackeros_legacy_mem_interfaces_disabled = true;
++#endif
+--
+2.43.0
