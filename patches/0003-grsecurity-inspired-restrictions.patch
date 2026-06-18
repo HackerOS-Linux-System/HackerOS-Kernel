@@ -1,0 +1,34 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 3/8] hackeros: restrykcje ptrace inspirowane grsecurity
+
+Dodaje zmienna hackeros_ptrace_scope_default uzywana jako
+domyslna, bardziej restrykcyjna wartosc Yama ptrace_scope na
+HackerOS Cybersecurity Edition - ograniczajac lokalna eskalacje
+uprawnien przez ptrace, co jest istotne na maszynie czesto
+uzywanej do analizy potencjalnie niebezpiecznego kodu.
+
+---
+ kernel/ptrace.c | 13 ++++++++++++
+ 1 file changed, 13 insertions(+)
+
+--- a/kernel/ptrace.c
++++ b/kernel/ptrace.c
+@@ -1585,3 +1585,16 @@
+ 	return ret;
+ }
+ #endif	/* CONFIG_COMPAT */
++
++#ifdef CONFIG_HACKEROS_KERNEL
++/*
++ * HackerOS Cybersecurity: domyslny poziom Yama ptrace_scope ustawiony
++ * na "restricted" (1) zamiast "classic" (0), zgodnie z dobrymi
++ * praktykami hardeningowymi dla stacji uzywanych do analiz
++ * bezpieczenstwa. Wartosc ta jest odczytywana przez modul Yama LSM
++ * jako domyslna przy starcie systemu (przed ewentualnym nadpisaniem
++ * przez sysctl kernel.yama.ptrace_scope).
++ */
++int hackeros_ptrace_scope_default = 1;
++EXPORT_SYMBOL(hackeros_ptrace_scope_default);
++#endif
+--
+2.43.0
