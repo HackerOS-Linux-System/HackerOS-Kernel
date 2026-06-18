@@ -1,0 +1,32 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 4/8] hackeros: tuning Xen dom0 pod narzedzia cybersecurity
+
+Dodaje znacznik kompilacyjny uzywany przez narzedzia HackerOS
+cybersecurity-tools do wykrycia, ze jadro dom0 zostalo
+zbudowane z patchsetem HackerOS Cybersecurity (np. do
+wlaczenia rozszerzonego logowania zdarzen hypervisora).
+
+---
+ arch/x86/xen/enlighten_pv.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+--- a/arch/x86/xen/enlighten_pv.c
++++ b/arch/x86/xen/enlighten_pv.c
+@@ -1612,3 +1612,15 @@
+ 	.runtime.pin_vcpu       = xen_pin_vcpu,
+ 	.ignore_nopv		= true,
+ };
++
++#ifdef CONFIG_HACKEROS_KERNEL
++/*
++ * HackerOS Cybersecurity: dom0 jest tu uzywane jako host do uruchamiania
++ * izolowanych domU z narzedziami pentestingowymi/forensics (HackerOS
++ * Cybersecurity Edition dostarcza Xen Hypervisor z pudelka). Flaga
++ * poniej jest odczytywana przez warstwe userspace (xl/libxl poprzez
++ * /sys) jako wskazanie, ze to jadro zostalo zbudowane z preferencja
++ * dla scenariuszy audytu/logowania zdarzen hypervisora.
++ */
++static const int hackeros_xen_dom0_audit_logging = 1;
++#endif
+--
+2.43.0
