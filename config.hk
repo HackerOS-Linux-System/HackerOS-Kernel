@@ -10,7 +10,7 @@
 -> branch      => cybersecurity
 -> maintainer  => HackerOS Linux System <hackeros068@gmail.com>
 -> homepage    => https://hackeros-linux-system.github.io/HackerOS-Website/
--> license     => GPL-2.0
+-> license     => MPL-2.0
 -> description => Zmodyfikowane jadro Linux dla HackerOS Cybersecurity Edition
 
 ! ---------------------------------------------------------------------------
