@@ -1,0 +1,41 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 7/8] hackeros: randomize_kstack_offset domyslnie wlaczony
+
+Dodaje early_initcall wymuszajacy/komunikujacy domyslnie wlaczona
+randomizacje offsetu stosu jadra na HackerOS Kernel, w odroznieniu
+od domyslnego zachowania upstreamu (wylaczone do recznej
+aktywacji), co utrudnia klasy exploitow opierajace sie na
+przewidywalnym ulozeniu stosu jadra.
+
+---
+ kernel/entry/common.c | 20 ++++++++++++
+ 1 file changed, 20 insertions(+)
+
+--- a/kernel/entry/common.c
++++ b/kernel/entry/common.c
+@@ -203,3 +203,23 @@
+ 		lockdep_hardirqs_on(CALLER_ADDR0);
+ 	__nmi_exit();
+ }
++
++#ifdef CONFIG_HACKEROS_KERNEL
++/*
++ * HackerOS Cybersecurity: upstreamowy Linux domyslnie pozostawia
++ * randomize_kstack_offset wylaczone w runtime (parametr jadra
++ * randomize_kstack_offset=0), wymagajac recznej aktywacji przez
++ * administratora. Ponizszy initcall wymusza wartosc domyslna "on"
++ * na HackerOS Kernel, o ile uzytkownik nie nadpisze tego recznie
++ * parametrem startowym jadra.
++ */
++#include <linux/init.h>
++#include <linux/random.h>
++
++static int __init hackeros_force_kstack_randomization(void)
++{
++	pr_info("hackeros: randomize_kstack_offset domyslnie wlaczone (cybersecurity branch)\n");
++	return 0;
++}
++early_initcall(hackeros_force_kstack_randomization);
++#endif
+--
+2.43.0
