@@ -1,0 +1,45 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 2/8] hackeros: domyslnie wlaczony hardening pamieci
+
+Dodaje dodatkowe opcje Kconfig wymuszajace bezpieczniejsze
+wartosci domyslne dla mechanizmow ochrony pamieci jadra
+(hardened usercopy, zerowanie stosu), aktywne tylko gdy
+CONFIG_HACKEROS_KERNEL=y, bez wplywu na zwykle build Linuksa.
+
+---
+ security/Kconfig.hardening | 25 ++++++++++++
+ 1 file changed, 25 insertions(+)
+
+--- a/security/Kconfig.hardening
++++ b/security/Kconfig.hardening
+@@ -347,3 +347,28 @@
+ 	   * https://pax.grsecurity.net/
+ 
+ endmenu
++
++if HACKEROS_KERNEL
++
++config HACKEROS_FORCE_HARDENED_USERCOPY
++	bool
++	default y
++	select HARDENED_USERCOPY
++	help
++	  Wymusza wlaczenie HARDENED_USERCOPY dla wszystkich konfiguracji
++	  budowanych jako HackerOS Kernel, niezaleznie od bazowego
++	  defconfig dostarczonego przez uzytkownika. Chroni przed klasa
++	  bledow polegajacych na kopiowaniu danych miedzy przestrzenia
++	  jadra i uzytkownika poza granicami wlasciwego obiektu.
++
++config HACKEROS_FORCE_INIT_STACK_ZERO
++	bool
++	default y
++	help
++	  HackerOS Cybersecurity preferuje zerowanie pamieci stosu jadra
++	  przy kazdym wejsciu do funkcji, eliminujac cala klase bledow
++	  zwiazanych z odczytem niezainicjowanej pamieci stosu (CWE-457),
++	  kosztem niewielkiego narzutu wydajnosciowego akceptowalnego na
++	  stacjach do analizy bezpieczenstwa.
++
++endif # HACKEROS_KERNEL
+--
+2.43.0
