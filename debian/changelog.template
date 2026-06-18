@@ -1,0 +1,13 @@
+hackeros-kernel-cybersecurity (VERSION-hk1) UNRELEASED; urgency=medium
+
+  * Build z Linux VERSION + patchset HackerOS Cybersecurity (8 patchy).
+  * Hardening: KASLR, stack protector strong, FORTIFY_SOURCE,
+    randomize_kstack_offset=on, page table isolation, lockdown LSM
+    (confidentiality), AppArmor + audit wlaczone, SELinux wylaczony.
+  * Xen dom0/domU/PV/HVM support wlaczony (CONFIG_XEN_DOM0=y).
+  * Rozszerzone podsystemy cybersecurity: nf_tables, packet socket,
+    USB monitor, wireless injection, bluetooth monitor, eBPF tracing,
+    kprobes, ftrace, dm-crypt/dm-verity, TPM, IMA/EVM.
+  * Branding: CONFIG_LOCALVERSION="-hackeros-cybersec".
+
+ -- HackerOS Linux System <hackeros068@gmail.com>  DATE
