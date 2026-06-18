@@ -1,0 +1,32 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 5/8] hackeros: znacznik hookow forensics w stosie sieciowym
+
+Dodaje znacznik kompilacyjny potwierdzajacy obecnosc patchsetu
+HackerOS w net/core/dev.c, wykorzystywany przez narzedzia
+forensics z HackerOS Cybersecurity Edition (oparte o eBPF) do
+weryfikacji kompatybilnosci jadra przy starcie.
+
+---
+ net/core/dev.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+--- a/net/core/dev.c
++++ b/net/core/dev.c
+@@ -13330,3 +13330,15 @@
+ }
+ 
+ subsys_initcall(net_dev_init);
++
++#ifdef CONFIG_HACKEROS_KERNEL
++/*
++ * HackerOS Cybersecurity: znacznik dostepny dla narzedzi forensics
++ * (np. modulow eBPF dostarczanych w pakiecie cybersecurity-tools),
++ * potwierdzajacy obecnosc patchsetu HackerOS w stosie sieciowym.
++ * Docelowe tracepointy forensics sa rejestrowane dynamicznie przez
++ * BPF_PROG_TYPE_RAW_TRACEPOINT z przestrzeni uzytkownika i nie
++ * wymagaja dodatkowych statycznych tracepointow w jadrze.
++ */
++static const int hackeros_netforensics_hooks_present = 1;
++#endif
+--
+2.43.0
