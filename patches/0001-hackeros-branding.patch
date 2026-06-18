@@ -1,0 +1,33 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 1/8] hackeros: branding jadra jako HackerOS Kernel (cybersecurity)
+
+Dodaje opcje Kconfig HACKEROS_KERNEL identyfikujaca to jadro jako
+HackerOS Kernel (branch cybersecurity), uzywana przez pozostale
+patche patchsetu (#ifdef CONFIG_HACKEROS_KERNEL) oraz przez
+build.lua/kconfig.lua do wstrzykiwania CONFIG_LOCALVERSION.
+
+---
+ init/Kconfig | 13 ++++++++++++
+ 1 file changed, 13 insertions(+)
+
+--- a/init/Kconfig
++++ b/init/Kconfig
+@@ -2316,3 +2316,16 @@
+ # <asm/syscall_wrapper.h>.
+ config ARCH_HAS_SYSCALL_WRAPPER
+ 	def_bool n
++
++config HACKEROS_KERNEL
++	bool "Build as HackerOS Kernel (cybersecurity branch)"
++	default y
++	help
++	  Wlacza branding i domyslne ustawienia specyficzne dla
++	  HackerOS Kernel, jadra Linux dostarczanego z HackerOS
++	  Cybersecurity Edition. Obejmuje to m.in. dedykowany
++	  string wersji, domyslnie wlaczone mechanizmy hardeningowe
++	  oraz wsparcie dla Xen dom0 dostosowane do narzedzi
++	  cybersecurity dostarczanych w tej edycji HackerOS.
++
++	  Jesli nie wiesz co to jest, wybierz N.
+--
+2.43.0
