@@ -1,0 +1,36 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 6/8] hackeros: rozszerzone audytowanie wywolan systemowych
+
+Eksportuje referencyjna liste syscalli wysokiego priorytetu dla
+audytu bezpieczenstwa, uzywana przez skrypt konfiguracyjny
+auditd w HackerOS Cybersecurity Edition jako sensowny punkt
+startowy 'audytu z pudelka'.
+
+---
+ kernel/auditsc.c | 16 ++++++++++++
+ 1 file changed, 16 insertions(+)
+
+--- a/kernel/auditsc.c
++++ b/kernel/auditsc.c
+@@ -2981,3 +2981,19 @@
+ 		return NULL;
+ 	return &ctx->killed_trees;
+ }
++
++#ifdef CONFIG_HACKEROS_KERNEL
++/*
++ * HackerOS Cybersecurity: domyslna lista syscalli "wysokiego priorytetu"
++ * sugerowanych do audytu nawet przy minimalnej konfiguracji auditd -
++ * execve, ptrace, mount/umount2 oraz rodzina setuid/setgid. Pelna
++ * kontrola pozostaje po stronie reguł auditd w userspace (np.
++ * /etc/audit/rules.d/), to jedynie eksportowana lista referencyjna
++ * uzywana przez skrypt konfiguracyjny auditd dostarczany z HackerOS
++ * Cybersecurity Edition.
++ */
++const char hackeros_audit_priority_syscalls[] =
++	"execve,execveat,ptrace,process_vm_writev,mount,umount2,"
++	"setuid,setgid,setresuid,setresgid";
++EXPORT_SYMBOL(hackeros_audit_priority_syscalls);
++#endif
+--
+2.43.0
