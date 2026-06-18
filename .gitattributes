@@ -1,0 +1,3 @@
+*.conf linguist-detectable=true
+*.conf linguist-documentation=false
+*.conf linguist-language=KCONFIG
