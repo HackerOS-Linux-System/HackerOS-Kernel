@@ -1,0 +1,62 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 13/16] hackeros: tamper-evident audyt odmowy ladowania modulu
+
+Dodaje audit hook w module_verify_signature() logujacy kazda
+odmowe zaladowania niepodpisanego/niezaufanego modulu przez
+KERN_WARNING (pr_warn). Bez tego patcha, odmowa jest sygnalizowana
+tylko przez KERN_NOTICE "Loading of X is rejected" - co przy
+typowym poziomie logowania moze byc ignorowane lub filtrowane.
+Hook hackeros_module_reject_audit_log() gwarantuje, ze kazda
+proba zaladowania nieautoryzowanego modulu (np. rootkita bez
+podpisu) generuje wyrazny slad z PID i comm inicjatora, widoczny
+filtrem "hackeros_module_audit:" w logu systemowym.
+
+---
+ kernel/module/signing.c | 23 +++++++++++++++++++++++
+ 1 file changed, 23 insertions(+)
+
+--- a/kernel/module/signing.c
++++ b/kernel/module/signing.c
+@@ -16,6 +16,11 @@
+ #include <uapi/linux/module.h>
+ #include "internal.h"
+ 
++#ifdef CONFIG_HACKEROS_KERNEL
++#include <linux/sched.h>
++static void hackeros_module_reject_audit_log(const char *reason);
++#endif
++
+ #undef MODULE_PARAM_PREFIX
+ #define MODULE_PARAM_PREFIX "module."
+ 
+@@ -118,8 +123,28 @@
+ 
+ 	if (is_module_sig_enforced()) {
+ 		pr_notice("Loading of %s is rejected\n", reason);
++#ifdef CONFIG_HACKEROS_KERNEL
++		hackeros_module_reject_audit_log(reason);
++#endif
+ 		return -EKEYREJECTED;
+ 	}
+ 
+ 	return security_locked_down(LOCKDOWN_MODULE_SIGNATURE);
+ }
++
++#ifdef CONFIG_HACKEROS_KERNEL
++/*
++ * HackerOS Cybersecurity: tamper-evident audyt odmowy wczytania modulu.
++ * Kazda odmowa wczytania niepodpisanego/niezaufanego modulu (gdy
++ * module.sig_enforce=1) jest logowana z PID i nazwa procesu inicjujacego
++ * insmod/modprobe, niezaleznie od poziomu logowania jadra skonfigurowanego
++ * przez administratora (KERN_WARNING). Na stacji do analizy malware
++ * cicha odmowa bez wyraznego sladu audytowego utrudnialaby wykrycie
++ * proby wczytania niezaufanego rootkita/sterownika.
++ */
++static void hackeros_module_reject_audit_log(const char *reason)
++{
++	pr_warn("hackeros_module_audit: REJECTED module load (%s) pid=%d comm=%s\n",
++		reason, current->pid, current->comm);
++}
++#endif
+-- 
+2.43.0
