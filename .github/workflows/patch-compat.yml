@@ -1,5 +1,12 @@
 name: HackerOS Kernel Patch Compatibility
 
+# Domyslny GITHUB_TOKEN ma tylko 'issues: read' - bez tego bloku
+# notify-on-failure dostaje "Resource not accessible by integration"
+# przy probie github.rest.issues.create.
+permissions:
+  contents: read
+  issues: write
+
 on:
   # Uruchamia testy patchy codziennie o 06:00 UTC
   schedule:
@@ -140,11 +147,17 @@ jobs:
           echo "Shell syntax check: templates OK (sprawdzany przez sh -n podczas testu deb)"
 
   # --- Powiadomienie przez GitHub Issues przy wykryciu niezgodnosci ---
+  # Ograniczone do schedule/push: pull_request (zwlaszcza z forka) zawsze
+  # otrzymuje GITHUB_TOKEN tylko-do-odczytu z powodow bezpieczenstwa,
+  # niezaleznie od `permissions:` zdefiniowanych w tym pliku - tworzenie
+  # Issue tam i tak skonczy sie "Resource not accessible by integration".
   notify-on-failure:
     name: "Notify on patch failure"
     runs-on: ubuntu-24.04
     needs: [patch-compat-latest, patch-compat-versions]
-    if: failure()
+    if: failure() && github.event_name != 'pull_request'
+    permissions:
+      issues: write
     steps:
       - name: Create issue on patch incompatibility
         uses: actions/github-script@v7
