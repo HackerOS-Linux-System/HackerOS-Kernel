@@ -69,6 +69,7 @@ local PATCH_TOUCHED_FILES = {
 }
 
 local function fetch_kernel_files(version, work_dir, opts)
+    version = tostring(version)
     local major = version:match("^(%d+)")
     local base_url = string.format(
         "https://raw.githubusercontent.com/torvalds/linux/v%s/", version)
@@ -247,6 +248,9 @@ local function main()
     end
 
     -- okresl wersje do testow
+    -- (base_version/min_version z config.hk moga byc parsowane jako Lua
+    -- number, np. 7.1 bez cudzyslowu w .hk - wymuszamy string od razu,
+    -- zeby version:match(...) nizej nie wybuchlo na number value)
     local version = opts.version
     if not version and not opts.local_src then
         -- auto-detect latest stable z kernel.org
@@ -254,13 +258,14 @@ local function main()
                    or (Utils.capture("command -v wget 2>/dev/null") and "wget")
                    or nil
         if downloader then
-            local latest = Source.detect_latest_stable(cfg.source.min_version, downloader)
+            local latest = Source.detect_latest_stable(tostring(cfg.source.min_version), downloader)
             version = latest or cfg.source.base_version
         else
             version = cfg.source.base_version
         end
     end
     version = version or cfg.source.base_version
+    version = tostring(version)
 
     local work_dir = "/tmp/hackeros_patch_test_" .. tostring(os.time())
     Utils.mkdir_p(work_dir)
@@ -269,7 +274,7 @@ local function main()
     local src_ok
     if opts.local_src then
         src_ok = use_local_src(opts.local_src, work_dir)
-        version = opts.version or cfg.source.base_version
+        version = tostring(opts.version or cfg.source.base_version)
     else
         src_ok = fetch_kernel_files(version, work_dir, opts)
     end
