@@ -1,0 +1,65 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 14/16] hackeros: audyt "malicious frontend" w Xen netback
+
+Dodaje audit hook dla zdarzenia "malicious frontend" w Xen netback,
+ktore wykrywa probe przeslania ramki z nieprawidlowa (zbyt duza)
+liczba slotow - sygnatura DoS lub proby exploitacji sterownika
+netback od strony domU. HackerOS Cybersecurity Edition uzywa Xen
+do izolacji srodowisk analizy malware, wiec domU moze byc celowo
+hostila - log hackeros_xen_audit z domain ID pozwala narzedzia
+monitorowania HackerOS szybko wskazac ktora domU zachowuje sie
+podejrzanie, bez analizy pelnych logov netback.
+
+---
+ drivers/net/xen-netback/netback.c | 20 ++++++++++++++++++++
+ 1 file changed, 20 insertions(+)
+
+--- a/drivers/net/xen-netback/netback.c
++++ b/drivers/net/xen-netback/netback.c
+@@ -49,6 +49,11 @@
+ 
+ #include <asm/xen/hypercall.h>
+ 
++#ifdef CONFIG_HACKEROS_KERNEL
++static void hackeros_xen_malicious_frontend_log(const struct xenvif *vif, int slots,
++						 unsigned int threshold);
++#endif
++
+ /* Provide an option to disable split event channels at load time as
+  * event channels are limited resource. Split event channels are
+  * enabled by default.
+@@ -261,6 +266,9 @@
+ 			netdev_err(queue->vif->dev,
+ 				   "Malicious frontend using %d slots, threshold %u\n",
+ 				   slots, fatal_skb_slots);
++#ifdef CONFIG_HACKEROS_KERNEL
++			hackeros_xen_malicious_frontend_log(queue->vif, slots, fatal_skb_slots);
++#endif
+ 			xenvif_fatal_tx_err(queue->vif);
+ 			return -E2BIG;
+ 		}
+@@ -1788,3 +1796,22 @@
+ MODULE_DESCRIPTION("Xen backend network device module");
+ MODULE_LICENSE("Dual BSD/GPL");
+ MODULE_ALIAS("xen-backend:vif");
++
++#ifdef CONFIG_HACKEROS_KERNEL
++/*
++ * HackerOS Cybersecurity: audyt zdarzen "malicious frontend" w Xen
++ * netback. HackerOS Cybersecurity Edition uzywa Xen do izolacji
++ * srodowisk testowych (np. uruchamiania podejrzanych probek malware
++ * w domU) - domU usilujaca przeslac ramke z nieprawdopodobnie duza
++ * liczba slotow jest klasycznym sygnalem proby DoS lub eksploitacji
++ * sterownika netback z perspektywy gosta. Logujemy domain id gosta,
++ * zeby narzedzia forensics HackerOS mogly skorelowac zdarzenie z
++ * konkretna domU bez koniecznosci parsowania linii z netdev_err.
++ */
++static void hackeros_xen_malicious_frontend_log(const struct xenvif *vif, int slots,
++						 unsigned int threshold)
++{
++	pr_warn("hackeros_xen_audit: malicious frontend domid=%u slots=%d threshold=%u\n",
++		vif->domid, slots, threshold);
++}
++#endif
+-- 
+2.43.0
