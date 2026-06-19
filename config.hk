@@ -43,10 +43,10 @@
 -> section          => kernel
 -> priority         => optional
 -> architecture     => amd64
--> conflicts        => ["linux-image-amd64", "linux-image-*-amd64"]
+-> conflicts        => ["linux-image-amd64"]
 -> replaces         => ["linux-image-amd64"]
 -> provides         => ["linux-image", "linux-image-amd64"]
--> depends          => ["initramfs-tools | dracut", "kmod", "grub-pc | grub-efi-amd64"]
+-> depends          => ["initramfs-tools | dracut", "kmod", "grub-pc | grub-efi-amd64", "openssl"]
 -> recommends       => ["xen-hypervisor-4.20-amd64", "hackeros-cybersecurity-tools"]
 -> set_default      => true
 -> remove_old_kernel => true
@@ -89,7 +89,15 @@
   "0005-network-forensics-hooks.patch",
   "0006-syscall-auditing-extended.patch",
   "0007-randomize-kstack-default-on.patch",
-  "0008-disable-legacy-debug-interfaces.patch"
+  "0008-disable-legacy-debug-interfaces.patch",
+  "0009-bpf-jit-harden-default-on.patch",
+  "0010-yama-ptrace-scope-default-restricted.patch",
+  "0011-tcp-md5-and-syn-flood-hardening.patch",
+  "0012-usb-rawgadget-audit-log.patch",
+  "0013-module-sig-enforce-tamper-evident.patch",
+  "0014-xen-domu-network-isolation-default.patch",
+  "0015-ebpf-prog-load-audit-trail.patch",
+  "0016-kernel-lockdown-confidentiality-strict.patch"
   ]
 -> fail_on_reject => true
 
@@ -117,6 +125,44 @@
 -> apparmor                => true
 -> audit                    => true
 -> integrity_appraisal      => true
+
+! ---------------------------------------------------------------------------
+! Runtime hardening - ustawienia ktore NIE sa CONFIG_* w .config, a parametrami
+! startowymi jadra (GRUB_CMDLINE) lub sysctl ustawianymi przez postinst.
+! Sa stabilne miedzy wersjami jadra (w odroznieniu od patchy zaczepionych
+! o konkretne linie kodu), bo to oficjalne, dokumentowane interfejsy ABI.
+! ---------------------------------------------------------------------------
+[runtime_hardening]
+! --- Parametry wiersza polecen jadra (dopisywane do GRUB_CMDLINE_LINUX_DEFAULT) ---
+-> boot_params
+--> randomize_kstack_offset => on
+--> "page_alloc.shuffle"      => 1
+--> slab_nomerge               => true
+--> init_on_alloc              => 1
+--> init_on_free                => 1
+--> "usbcore.authorized_default" => 2
+--> debugfs                      => off
+--> mce                          => 0
+--> vsyscall                     => none
+
+! --- Sysctl wymuszane przez postinst do /etc/sysctl.d/99-hackeros-cybersec.conf ---
+-> sysctl
+--> "kernel.kptr_restrict"             => 2
+--> "kernel.dmesg_restrict"             => 1
+--> "kernel.yama.ptrace_scope"           => 2
+--> "kernel.unprivileged_bpf_disabled"    => 1
+--> "net.core.bpf_jit_harden"             => 2
+--> "kernel.kexec_load_disabled"          => 1
+--> "kernel.sysrq"                          => 0
+--> "kernel.perf_event_paranoid"            => 3
+--> "net.ipv4.tcp_syncookies"                => 1
+--> "net.ipv4.conf.all.rp_filter"             => 1
+--> "net.ipv4.conf.all.accept_source_route"    => 0
+--> "net.ipv4.icmp_echo_ignore_broadcasts"      => 1
+--> "net.ipv4.conf.all.log_martians"             => 1
+--> "fs.protected_hardlinks"                       => 1
+--> "fs.protected_symlinks"                          => 1
+--> "fs.suid_dumpable"                                => 0
 
 ! ---------------------------------------------------------------------------
 ! Wsparcie dla Xen (hypervisor juz obecny w HackerOS Cybersecurity Edition)
@@ -155,12 +201,39 @@
 -> src_dir      => ./src
 -> kernel_src   => ${paths.src_dir}/linux
 -> deb_workdir  => ./debian-build
--> output_deb   => ${build.output}/${package.name}_${versioning.deb_version}_${target.architecture}.deb
+-> headers_deb_workdir => ./debian-build-headers
+-> output_deb   => ${build.output}/${package.name}_${versioning.deb_version}_${package.architecture}.deb
+-> output_headers_deb => ${build.output}/${headers_package.name}_${versioning.deb_version}_${package.architecture}.deb
 
+! ---------------------------------------------------------------------------
+! Podpisywanie modulow i pakietu. Jesli hardening.module_sig = true,
+! build.lua wygeneruje wlasna pare kluczy X.509 (RSA) uzywana do podpisania
+! WSZYSTKICH modulow w drzewie (wbudowanych i przyszlych out-of-tree/DKMS),
+! zamiast jednorazowego klucza generowanego domyslnie przez sam kernel.
+! Klucz prywatny jest zachowywany w keys_dir, aby DKMS mogl podpisywac
+! nowo budowane moduly tym samym kluczem po instalacji.
+! ---------------------------------------------------------------------------
 [signing]
--> sign_modules    => false
--> sign_package    => false
--> gpg_key_id       => ""
+-> sign_modules     => true
+-> keys_dir          => ./build/keys
+-> key_cn             => HackerOS Kernel Module Signing
+-> key_days_valid      => 3650
+-> install_key_for_dkms => true
+-> sign_package      => false
+-> gpg_key_id         => ""
+
+! ---------------------------------------------------------------------------
+! Osobny pakiet .deb z naglowkami jadra (linux-headers-*), niezbedny do
+! budowania modulow out-of-tree przez DKMS - kluczowe dla edycji cybersecurity,
+! gdzie uzytkownicy doinstalowuja sterowniki WiFi do wstrzykiwania pakietow
+! (np. rtl88xxau, rtl8812au) ktore nie sa w drzewie glownym jadra.
+! ---------------------------------------------------------------------------
+[headers_package]
+-> enabled       => true
+-> name           => hackeros-kernel-headers-cybersecurity
+-> depends         => ["gcc", "make", "binutils", "libssl-dev", "bc", "flex", "bison", "libelf-dev"]
+-> recommends      => ["dkms"]
+-> install_dkms_conf => true
 
 ! ===========================================================================
 ! Koniec config.hk
