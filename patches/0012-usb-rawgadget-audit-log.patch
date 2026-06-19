@@ -1,0 +1,69 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 12/16] hackeros: audyt autoryzacji USB (BadUSB forensics)
+
+Dodaje audit hook w usb_authorize_device() logujacy kazde
+autoryzowanie urzadzenia USB z VID:PID i numerem seryjnym.
+W polaczeniu z boot parametrem usbcore.authorized_default=2
+(tylko urzadzenia wewnetrzne autoryzowane automatycznie, zewnetrzne
+wymagaja recznie uzycia /sys/bus/usb/devices/*/authorized=1),
+kazda inna autoryzacja pojawia sie w logu jako:
+  hackeros_usb_audit: device authorized vid=XXXX pid=XXXX serial=...
+co pozwala narzedzia forensics HackerOS wykryc BadUSB / nieautoryzowane
+urzadzenie USB w post-incident analysis bez koniecznosci posiadania
+dedykowanego DLP.
+
+---
+ drivers/usb/core/hub.c | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+
+--- a/drivers/usb/core/hub.c
++++ b/drivers/usb/core/hub.c
+@@ -13,6 +13,10 @@
+ #include <linux/kernel.h>
+ #include <linux/errno.h>
+ #include <linux/module.h>
++
++#ifdef CONFIG_HACKEROS_KERNEL
++static void hackeros_usb_authorize_audit_log(const struct usb_device *usb_dev);
++#endif
+ #include <linux/moduleparam.h>
+ #include <linux/completion.h>
+ #include <linux/sched/mm.h>
+@@ -2794,6 +2798,9 @@
+ 		}
+ 	}
+ 	dev_info(&usb_dev->dev, "authorized to connect\n");
++#ifdef CONFIG_HACKEROS_KERNEL
++	hackeros_usb_authorize_audit_log(usb_dev);
++#endif
+ 
+ 	usb_autosuspend_device(usb_dev);
+ error_autoresume:
+@@ -2802,6 +2809,25 @@
+ 	return result;
+ }
+ 
++#ifdef CONFIG_HACKEROS_KERNEL
++/*
++ * HackerOS Cybersecurity: audyt autoryzacji nowych urzadzen USB.
++ * W polaczeniu z domyslnym usbcore.authorized_default=2 (tylko urzadzenia
++ * wewnetrzne autoryzowane automatycznie - patrz runtime_hardening w
++ * config.hk), kazda autoryzacja urzadzenia PODLACZONEGO ZEWNETRZNIE
++ * (np. recznie przez administratora po podlaczeniu nieznanego pendrive'a)
++ * jest logowana z identyfikatorem VID:PID i numerem seryjnym, co jest
++ * istotnym sladem audytowym przy podejrzeniu ataku typu BadUSB.
++ */
++static void hackeros_usb_authorize_audit_log(const struct usb_device *usb_dev)
++{
++	pr_info("hackeros_usb_audit: device authorized vid=%04x pid=%04x serial=%s\n",
++		le16_to_cpu(usb_dev->descriptor.idVendor),
++		le16_to_cpu(usb_dev->descriptor.idProduct),
++		usb_dev->serial ? usb_dev->serial : "unknown");
++}
++#endif
++
+ /**
+  * get_port_ssp_rate - Match the extended port status to SSP rate
+  * @hdev: The hub device
+-- 
+2.43.0
