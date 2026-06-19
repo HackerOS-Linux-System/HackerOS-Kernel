@@ -4,90 +4,64 @@
     build.lua  -  HackerOS Kernel (branch: cybersecurity) build system
     ============================================================================
 
-    Buduje od zera (ze zrodel kernel.org) zmodyfikowane jadro Linux dla
-    HackerOS Cybersecurity Edition i pakuje je do pliku .deb.
-
-    Po zainstalowaniu wygenerowanego pakietu na Debianie:
-      - usuwa aktualnie zainstalowane jadro(a) Debiana
-      - instaluje HackerOS Kernel
-      - ustawia je jako domyslne w GRUB
-
-    Wymagania:
-      - lua 5.5 lub nowsza (lua5.5 build.lua)
-      - dostep do internetu (sciaganie zrodel z kernel.org)
-      - typowe narzedzia budowania jadra: gcc, make, bc, flex, bison,
-        libssl-dev, libelf-dev, dpkg-dev, fakeroot, xz-utils
-
     Uzycie:
-      lua5.5 build.lua                 - pelny build z config.hk
-      lua5.5 build.lua --version=7.2   - wymusza konkretna wersje jadra
-      lua5.5 build.lua --no-download   - uzywa juz pobranych/rozpakowanych zrodel
-      lua5.5 build.lua --jobs=8        - nadpisuje liczbe wątkow kompilacji
-      lua5.5 build.lua --skip-patches  - pomija nakladanie patchy (debug)
-      lua5.5 build.lua --config=PATH   - uzywa innego pliku .hk niz config.hk
+      lua5.5 build.lua                   - pelny build
+      lua5.5 build.lua --version=7.2     - wymusza konkretna wersje jadra
+      lua5.5 build.lua --no-download     - uzywa juz pobranych/rozpakowanych zrodel
+      lua5.5 build.lua --jobs=8          - nadpisuje liczbe watkow kompilacji
+      lua5.5 build.lua --skip-patches    - pomija nakladanie patchy (debug)
+      lua5.5 build.lua --keep-going      - kontynuuje mimo bledow niekrytycznych
+      lua5.5 build.lua --config=PATH     - inny plik .hk
+      lua5.5 build.lua --no-sign        - pomija podpisywanie modulow
+      lua5.5 build.lua --no-headers     - pomija budowanie pakietu naglowkow
       lua5.5 build.lua --help
-
-    Struktura projektu (oczekiwana wzgledem build.lua):
-      build.lua
-      config.hk
-      scripts/{utils,hk_parser,source,patches,kconfig,compile,deb_package}.lua
-      src/            <- tu trafiaja zrodla jadra (linux-X.Y/) + symlink "linux"
-      patches/        <- patche HackerOS Cybersecurity nakladane na jadro
-      config/base.config, config/fragments/  <- bazowy .config i fragmenty
-    ============================================================================
 --]]
 
--- Pozwala "require" znajdowac moduly wzgledem katalogu, w ktorym jest build.lua,
--- niezalenie skad skrypt zostal wywolany.
 local script_path = arg and arg[0] or "build.lua"
-local script_dir = script_path:match("(.*/)") or "./"
+local script_dir  = script_path:match("(.*/)") or "./"
 package.path = script_dir .. "?.lua;" .. script_dir .. "?/init.lua;" .. package.path
 
-local Utils    = require("scripts.utils")
-local HK       = require("scripts.hk_parser")
-local Source   = require("scripts.source")
-local Patches  = require("scripts.patches")
-local Kconfig  = require("scripts.kconfig")
-local Compile  = require("scripts.compile")
-local DebPkg   = require("scripts.deb_package")
+local Utils   = require("scripts.utils")
+local HK      = require("scripts.hk_parser")
+local Source  = require("scripts.source")
+local Patches = require("scripts.patches")
+local Kconfig = require("scripts.kconfig")
+local Compile = require("scripts.compile")
+local DebPkg  = require("scripts.deb_package")
+local RH      = require("scripts.runtime_hardening")
 
 local MIN_LUA_MAJOR, MIN_LUA_MINOR = 5, 5
 
--- ----------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------
 -- Parsowanie argumentow CLI
--- ----------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------
 
 local function parse_args(argv)
     local opts = {
-        version       = nil,
-        no_download   = false,
-        skip_patches  = false,
-        jobs          = nil,
-        config_path   = "config.hk",
-        help          = false,
-        keep_going    = false,
+        version      = nil,
+        no_download  = false,
+        skip_patches = false,
+        jobs         = nil,
+        config_path  = "config.hk",
+        help         = false,
+        keep_going   = false,
+        no_sign      = false,
+        no_headers   = false,
     }
-
-    for _, a in ipairs(argv) do
+    for _, a in ipairs(argv or {}) do
         if a == "--help" or a == "-h" then
             opts.help = true
-        elseif a == "--no-download" then
-            opts.no_download = true
-        elseif a == "--skip-patches" then
-            opts.skip_patches = true
-        elseif a == "--keep-going" then
-            opts.keep_going = true
-        elseif a:match("^%-%-version=") then
-            opts.version = a:match("^%-%-version=(.+)$")
-        elseif a:match("^%-%-jobs=") then
-            opts.jobs = a:match("^%-%-jobs=(.+)$")
-        elseif a:match("^%-%-config=") then
-            opts.config_path = a:match("^%-%-config=(.+)$")
-        else
-            Utils.warn("Nieznana opcja: " .. a .. " (ignoruje)")
+        elseif a == "--no-download"  then opts.no_download  = true
+        elseif a == "--skip-patches" then opts.skip_patches = true
+        elseif a == "--keep-going"   then opts.keep_going   = true
+        elseif a == "--no-sign"      then opts.no_sign      = true
+        elseif a == "--no-headers"   then opts.no_headers   = true
+        elseif a:match("^%-%-version=") then opts.version     = a:match("^%-%-version=(.+)$")
+        elseif a:match("^%-%-jobs=")    then opts.jobs        = a:match("^%-%-jobs=(.+)$")
+        elseif a:match("^%-%-config=")  then opts.config_path = a:match("^%-%-config=(.+)$")
+        else Utils.warn("Nieznana opcja: " .. a)
         end
     end
-
     return opts
 end
 
@@ -99,186 +73,248 @@ Uzycie:
   lua5.5 build.lua [opcje]
 
 Opcje:
-  --version=X.Y       Wymusza konkretna wersje jadra Linux (np. 7.1, 7.2)
-                       Musi byc >= min_version z config.hk (domyslnie 7.1).
-  --no-download        Nie sciaga zrodel - wymaga, by byly juz w src/
-  --skip-patches        Pomija nakladanie patchy HackerOS (tryb debug)
-  --jobs=N              Nadpisuje liczbe wątkow kompilacji (domyslnie: auto/nproc)
-  --config=PATH         Uzywa innego pliku konfiguracyjnego .hk niz config.hk
-  --keep-going          Nie przerywa przy bledach niekrytycznych (np. brak fragmentu)
-  --help, -h             Wyswietla te pomoc
+  --version=X.Y      Wymusza konkretna wersje jadra (>= 7.1)
+  --no-download       Nie sciaga zrodel (muszą byc juz w src/)
+  --skip-patches       Pomija patchset (tryb debug/porownawczy)
+  --jobs=N             Liczba watkow kompilacji (domyslnie: auto/nproc)
+  --config=PATH        Inny plik .hk niz config.hk
+  --keep-going         Kontynuuje mimo bledow niekrytycznych
+  --no-sign             Pomija generowanie kluczy i podpisywanie modulow
+  --no-headers          Nie buduje odrebnego pakietu naglowkow
+  --help, -h             Wyswietla pomoc
 
 Przyklady:
   lua5.5 build.lua
   lua5.5 build.lua --version=7.3 --jobs=16
-  lua5.5 build.lua --no-download --skip-patches
+  lua5.5 build.lua --no-download --skip-patches --keep-going
+  lua5.5 build.lua --no-sign --no-headers   (szybszy build bez extra paczek)
 ]])
 end
 
--- ----------------------------------------------------------------------------
--- Sprawdzanie zaleznosci systemowych potrzebnych do budowy jadra + .deb
--- ----------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------
+-- Zaleznosci systemowe
+-- ---------------------------------------------------------------------------
 
 local REQUIRED_TOOLS = {
-    "make", "gcc", "bc", "flex", "bison", "dpkg-deb", "patch", "tar", "find",
+    "make", "gcc", "bc", "flex", "bison",
+    "dpkg-deb", "patch", "tar", "find", "openssl",
 }
 
-local function check_dependencies()
-    Utils.log("Sprawdzanie wymaganych narzedzi systemowych...")
+local function check_dependencies(opts)
+    Utils.log("Sprawdzanie wymaganych narzedzi...")
     local missing = {}
-
     for _, tool in ipairs(REQUIRED_TOOLS) do
+        if tool == "openssl" and opts.no_sign then goto skip end
         if not Utils.run("command -v " .. tool .. " > /dev/null 2>&1", true) then
             table.insert(missing, tool)
         end
+        ::skip::
     end
 
     if #missing > 0 then
         Utils.err("Brakujace narzedzia: " .. table.concat(missing, ", "))
-        Utils.err("Na Debianie zainstaluj je przez:")
-        Utils.err("  sudo apt-get install build-essential bc flex bison libssl-dev \\")
-        Utils.err("       libelf-dev dpkg-dev fakeroot xz-utils libncurses-dev")
+        Utils.err("  sudo apt-get install build-essential bc flex bison " ..
+                  "libssl-dev libelf-dev dpkg-dev fakeroot xz-utils openssl")
         os.exit(1)
     end
-
-    Utils.ok("Wszystkie wymagane narzedzia sa obecne.")
+    Utils.ok("Wszystkie wymagane narzedzia sa dostepne.")
 end
 
--- ----------------------------------------------------------------------------
--- Glowny przebieg builda
--- ----------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------
+-- Pomocnicze: blad niekrytyczny respektujacy --keep-going
+-- ---------------------------------------------------------------------------
 
-local TOTAL_STEPS = 7
+local function soft_error(opts, msg)
+    if opts.keep_going then
+        Utils.warn(msg .. " (--keep-going: kontynuuje mimo to)")
+    else
+        Utils.die(msg)
+    end
+end
+
+-- ---------------------------------------------------------------------------
+-- MAIN - 8 krokow
+-- ---------------------------------------------------------------------------
+
+local TOTAL_STEPS = 8
 
 local function main()
     local opts = parse_args(arg or {})
 
-    if opts.help then
-        print_help()
-        return
-    end
+    if opts.help then print_help(); return end
 
-    Utils.log("HackerOS Kernel build.lua - start")
+    Utils.log("HackerOS Kernel build.lua v2 - start")
     Utils.info("Interpreter: " .. Utils.lua_version_string())
     Utils.check_lua_version(MIN_LUA_MAJOR, MIN_LUA_MINOR)
 
-    -- ---- [1/7] Wczytanie config.hk -----------------------------------------
-    Utils.step(1, TOTAL_STEPS, "Wczytywanie konfiguracji z " .. opts.config_path)
-
+    -- [1/8] Konfiguracja --------------------------------------------------
+    Utils.step(1, TOTAL_STEPS, "Wczytywanie konfiguracji: " .. opts.config_path)
     if not Utils.file_exists(opts.config_path) then
         Utils.die("Nie znaleziono pliku konfiguracyjnego: " .. opts.config_path)
     end
-
     local cfg = HK.load_file(opts.config_path)
     HK.resolve_interpolations(cfg)
 
     if not cfg.metadata or not cfg.source or not cfg.package then
-        Utils.die("Plik " .. opts.config_path .. " jest niekompletny (brakuje [metadata]/[source]/[package]).")
+        Utils.die("config.hk niekompletny (brak [metadata]/[source]/[package]).")
     end
 
-    Utils.ok(string.format("Konfiguracja wczytana: %s (branch: %s)",
-        cfg.metadata.name, cfg.metadata.branch))
-
-    -- nadpisania z CLI
     if opts.version then
         cfg.source.base_version = opts.version
-        cfg.source.auto_latest = false
-        Utils.info("Wersja jadra wymuszona przez --version: " .. opts.version)
+        cfg.source.auto_latest  = false
+        Utils.info("Wersja wymuszona: " .. opts.version)
+    end
+    if opts.jobs     then cfg.build.jobs = opts.jobs end
+    if opts.no_sign  then cfg.signing.sign_modules = false end
+    if opts.no_headers and cfg.headers_package then
+        cfg.headers_package.enabled = false
     end
 
-    if opts.jobs then
-        cfg.build.jobs = opts.jobs
-    end
+    Utils.ok("Konfiguracja: " .. cfg.metadata.name .. " (branch: " .. cfg.metadata.branch .. ")")
+    Utils.info("Patchy w patchsecie: " .. #cfg.patches.apply_order)
+    Utils.info("Runtime hardening: sysctl + GRUB_CMDLINE")
+    Utils.info("Podpisywanie modulow: " .. (cfg.signing.sign_modules and "TAK" or "NIE"))
+    Utils.info("Pakiet naglowkow: " .. ((cfg.headers_package and cfg.headers_package.enabled) and "TAK" or "NIE"))
 
-    if cfg.target.arch ~= "x86_64" then
-        Utils.warn("config.hk deklaruje arch=" .. tostring(cfg.target.arch) ..
-                   ", ale ten build.lua jest zoptymalizowany pod x86_64.")
-    end
-
-    -- ---- [2/7] Walidacja zaleznosci -----------------------------------------
+    -- [2/8] Zaleznosci ---------------------------------------------------
     Utils.step(2, TOTAL_STEPS, "Walidacja zaleznosci systemowych")
-    check_dependencies()
+    check_dependencies(opts)
 
-    -- ---- [3/7] Zrodla jadra --------------------------------------------------
+    -- [3/8] Zrodla jadra -------------------------------------------------
     Utils.step(3, TOTAL_STEPS, "Przygotowanie zrodel jadra Linux")
-
     local paths = {
         src_dir    = cfg.paths.src_dir,
         kernel_src = cfg.paths.kernel_src,
         build_dir  = cfg.build.build_dir,
     }
-
     local kernel_version
     if opts.no_download then
         if not Utils.dir_exists(paths.kernel_src) then
             Utils.die("--no-download podane, ale " .. paths.kernel_src .. " nie istnieje.")
         end
         kernel_version = cfg.source.base_version
-        Utils.ok("Uzywam istniejacych zrodel w " .. paths.kernel_src .. " (bez sciagania).")
+        Utils.ok("Uzycie lokalnych zrodel: " .. paths.kernel_src)
     else
         kernel_version = Source.ensure_kernel_source(cfg, paths)
     end
+    Utils.ok("Zrodla Linux " .. kernel_version .. " gotowe.")
 
-    Utils.ok(string.format("Zrodla jadra Linux %s gotowe w %s", kernel_version, paths.kernel_src))
-
-    -- ---- [4/7] Patche HackerOS Cybersecurity ---------------------------------
-    Utils.step(4, TOTAL_STEPS, "Nakladanie patchy HackerOS (branch: cybersecurity)")
-
+    -- [4/8] Patche -------------------------------------------------------
+    Utils.step(4, TOTAL_STEPS, "Nakladanie patchsetu HackerOS (" ..
+        #cfg.patches.apply_order .. " patchy)")
     if opts.skip_patches then
-        Utils.warn("--skip-patches podane - pomijam caly patchset (build NIE jest oficjalny HackerOS Kernel).")
+        Utils.warn("--skip-patches: pomijam patchset (build nieoficjalny).")
     else
-        Patches.apply_all(cfg, paths.kernel_src)
+        local ok, err = pcall(Patches.apply_all, cfg, paths.kernel_src)
+        if not ok then
+            soft_error(opts, "Nakladanie patchy nie powiodlo sie: " .. tostring(err))
+        end
     end
 
-    -- ---- [5/7] Konfiguracja .config (hardening, Xen, cybersecurity) ---------
+    -- [5/8] Konfiguracja .config -----------------------------------------
     Utils.step(5, TOTAL_STEPS, "Generowanie konfiguracji jadra (.config)")
+    local ok, err = pcall(function()
+        local frag = Kconfig.generate_fragment(cfg, cfg.build.fragments_dir)
+        Kconfig.merge_and_finalize(cfg, paths.kernel_src, frag)
+    end)
+    if not ok then
+        soft_error(opts, "Generowanie .config nie powiodlo sie: " .. tostring(err))
+    end
 
-    local fragment_path = Kconfig.generate_fragment(cfg, cfg.build.fragments_dir)
-    Kconfig.merge_and_finalize(cfg, paths.kernel_src, fragment_path)
+    -- [5b] Przygotowanie kluczy podpisywania + inject do .config ----------
+    local signing_key_path, signing_cert_path
+    if cfg.signing and cfg.signing.sign_modules then
+        local sok, skey, scert = pcall(Compile.prepare_signing, cfg, paths.kernel_src)
+        if sok then
+            signing_key_path  = skey
+            signing_cert_path = scert
+        else
+            soft_error(opts, "Przygotowanie kluczy podpisywania nie powiodlo sie: " ..
+                tostring(skey))
+        end
+    end
 
-    -- ---- [6/7] Kompilacja + instalacja do DESTDIR ----------------------------
+    -- [6/8] Kompilacja ---------------------------------------------------
     Utils.step(6, TOTAL_STEPS, "Kompilacja jadra i modulow")
-
-    Compile.build_kernel(cfg, paths.kernel_src)
+    local comp_ok, comp_err = pcall(Compile.build_kernel, cfg, paths.kernel_src)
+    if not comp_ok then
+        Utils.die("Kompilacja jadra nie powiodla sie: " .. tostring(comp_err))
+    end
 
     local destdir = cfg.paths.deb_workdir .. "-destdir"
     Utils.rm_rf(destdir)
     Utils.mkdir_p(destdir)
-
     local kernel_release = Compile.install_to_destdir(cfg, paths.kernel_src, destdir)
 
-    -- ---- [7/7] Budowa pakietu .deb -------------------------------------------
-    Utils.step(7, TOTAL_STEPS, "Budowanie pakietu .deb")
+    -- [6b] Instalacja naglowkow (dla pakietu headers) --------------------
+    local headers_destdir = cfg.paths.deb_workdir .. "-headers-destdir"
+    local headers_built = false
+    if cfg.headers_package and cfg.headers_package.enabled then
+        Utils.rm_rf(headers_destdir)
+        Utils.mkdir_p(headers_destdir)
+        local hok, herr = pcall(Compile.install_headers_to_destdir,
+            cfg, paths.kernel_src, headers_destdir, kernel_release)
+        if hok then
+            headers_built = herr  -- install_headers_to_destdir zwraca bool
+        else
+            soft_error(opts, "Instalacja naglowkow nie powiodla sie: " .. tostring(herr))
+        end
+    end
 
-    local output_deb = DebPkg.build(cfg, destdir, kernel_release)
+    -- [7/8] Pakowanie .deb -----------------------------------------------
+    Utils.step(7, TOTAL_STEPS, "Budowanie pakietow .deb")
+    local output_deb = DebPkg.build(cfg, destdir, kernel_release,
+        signing_key_path, signing_cert_path)
 
+    local output_headers_deb = nil
+    if headers_built then
+        local hhok, hherr = pcall(DebPkg.build_headers, cfg, headers_destdir, kernel_release)
+        if hhok then
+            output_headers_deb = hherr
+        else
+            soft_error(opts, "Pakowanie naglowkow nie powiodlo sie: " .. tostring(hherr))
+        end
+    end
+
+    -- sprzatanie DESTDIR
     Utils.rm_rf(destdir)
+    if headers_built then Utils.rm_rf(headers_destdir) end
 
-    -- ---- Podsumowanie ---------------------------------------------------------
+    -- [8/8] Podsumowanie -------------------------------------------------
+    Utils.step(8, TOTAL_STEPS, "Build zakonczony")
     print("")
-    Utils.ok("============================================================")
-    Utils.ok(" Build zakonczony sukcesem!")
-    Utils.ok(" Jadro:        " .. cfg.metadata.name .. " (branch: " .. cfg.metadata.branch .. ")")
-    Utils.ok(" Wersja Linux: " .. kernel_version)
+    Utils.ok("====================================================")
+    Utils.ok(" HackerOS Kernel - build zakonczony pomyslnie")
+    Utils.ok(" Jadro:        " .. cfg.metadata.name)
+    Utils.ok(" Branch:       " .. cfg.metadata.branch)
+    Utils.ok(" Linux:        " .. kernel_version)
     Utils.ok(" Release:      " .. kernel_release)
+    Utils.ok(" Patchy:       " .. #cfg.patches.apply_order)
     Utils.ok(" Pakiet .deb:  " .. output_deb)
-    Utils.ok("============================================================")
+    if output_headers_deb then
+        Utils.ok(" Headers .deb: " .. output_headers_deb)
+    end
+    if signing_key_path then
+        Utils.ok(" Klucz MOK:    " .. (cfg.signing.keys_dir) .. "/hackeros-signing-key.crt")
+    end
+    Utils.ok("====================================================")
     print("")
-    print("Instalacja na Debianie:")
+    print("Instalacja:")
     print("  sudo dpkg -i " .. output_deb)
+    if output_headers_deb then
+        print("  sudo dpkg -i " .. output_headers_deb)
+    end
+    if signing_key_path then
+        print("")
+        print("Jesli uzywasz UEFI Secure Boot, zarejestruj klucz MOK:")
+        print("  sudo mokutil --import " .. cfg.signing.keys_dir ..
+              "/hackeros-signing-key.crt")
+    end
     print("")
-    print("Pakiet automatycznie usunie biezace jadro Debiana, zainstaluje")
-    print("HackerOS Kernel i ustawi je jako domyslne w GRUB. Po instalacji")
-    print("zrestartuj system, aby uruchomic nowe jadro.")
 end
-
--- ----------------------------------------------------------------------------
--- Obsluga bledow na najwyzszym poziomie
--- ----------------------------------------------------------------------------
 
 local ok, err = pcall(main)
 if not ok then
-    Utils.err("Build przerwany niespodziewanym bledem:")
-    Utils.err(tostring(err))
+    Utils.err("Build przerwany: " .. tostring(err))
     os.exit(1)
 end
