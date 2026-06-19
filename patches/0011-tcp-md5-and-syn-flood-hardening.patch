@@ -1,0 +1,63 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 11/16] hackeros: audyt zdarzen TCP-MD5 (RFC 2385) w forensics
+
+Dodaje audit hook w __tcp_md5_do_add() logujacy kazde dodanie/
+aktualizacje klucza TCP-MD5 (RFC 2385). TCP-MD5 jest uzywane
+produkcyjnie do ochrony sesji BGP - niezauwazona zmiana klucza
+to potencjalna proba przejecia sesji lub atak downgrade. Hook
+loguje rodzine adresow, dlugosc klucza i PID inicjatora przez
+pr_info (widoczne przez auditd/journald/dmesg z filtrem
+"hackeros:"), NIE loguje samego klucza (zapobieganie wyciekom
+danych wrazliwych do logow). Implementacja uzyta wzorzec
+forward-declaration + definicja append-only dla stabilnosci
+miedzy wersjami 7.x.
+
+---
+ net/ipv4/tcp_ipv4.c | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+
+--- a/net/ipv4/tcp_ipv4.c
++++ b/net/ipv4/tcp_ipv4.c
+@@ -92,6 +92,10 @@
+ 
+ #include <trace/events/tcp.h>
+ 
++#ifdef CONFIG_HACKEROS_KERNEL
++static void hackeros_tcp_md5_audit_log(const struct sock *sk, int family, u8 keylen);
++#endif
++
+ #ifdef CONFIG_TCP_MD5SIG
+ static void tcp_v4_md5_hash_hdr(char *md5_hash, const struct tcp_md5sig_key *key,
+ 				__be32 daddr, __be32 saddr, const struct tcphdr *th);
+@@ -1384,6 +1388,9 @@
+ 	       (IS_ENABLED(CONFIG_IPV6) && family == AF_INET6) ? sizeof(struct in6_addr) :
+ 								 sizeof(struct in_addr));
+ 	hlist_add_head_rcu(&key->node, &md5sig->head);
++#ifdef CONFIG_HACKEROS_KERNEL
++	hackeros_tcp_md5_audit_log(sk, family, newkeylen);
++#endif
+ 	return 0;
+ }
+ 
+@@ -3663,3 +3670,19 @@
+ 	bpf_iter_register();
+ #endif
+ }
++
++#ifdef CONFIG_HACKEROS_KERNEL
++/*
++ * HackerOS Cybersecurity: audyt dodawania kluczy TCP-MD5 (RFC 2385).
++ * TCP-MD5 jest nadal uzywane w produkcji (np. sesje BGP), a niezauwazona
++ * zmiana/dodanie klucza moze oznaczac proba przejecia sesji lub atak typu
++ * downgrade. Logujemy adres rodziny, dlugosc klucza i PID procesu
++ * inicjujacego zmiane - NIE logujemy samego klucza. Widoczne w dmesg/
++ * audit dla narzedzi forensics HackerOS Cybersecurity Edition.
++ */
++static void hackeros_tcp_md5_audit_log(const struct sock *sk, int family, u8 keylen)
++{
++	pr_info("hackeros: tcp_md5 key added/updated family=%d keylen=%u pid=%d comm=%s\n",
++		family, keylen, current->pid, current->comm);
++}
++#endif
+-- 
+2.43.0
