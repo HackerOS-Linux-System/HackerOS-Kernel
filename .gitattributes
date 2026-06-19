@@ -1,3 +1,7 @@
 *.conf linguist-detectable=true
 *.conf linguist-documentation=false
 *.conf linguist-language=KCONFIG
+
+*.yml linguist-detectable=true
+*.yml linguist-documentation=false
+*.yml linguist-language=YAML
