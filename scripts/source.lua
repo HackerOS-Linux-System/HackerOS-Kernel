@@ -91,7 +91,7 @@ function Source.ensure_kernel_source(cfg, paths)
     end
 
     if source_cfg.auto_latest then
-        local latest = Source.detect_latest_stable(source_cfg.min_version, tool)
+        local latest = Source.detect_latest_stable(tostring(source_cfg.min_version), tool)
         if latest then
             Utils.ok("Najnowsza wykryta wersja stabilna: " .. latest)
             resolved_version = latest
