@@ -1,0 +1,52 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 15/16] hackeros: rozszerzenie AUDIT_BPF o PID/comm inicjatora
+
+Rozszerza istniejacy (upstream) rekord audytu AUDIT_BPF generowany
+przez bpf_audit_prog() o pola hackeros_loader_pid i
+hackeros_loader_comm. Upstream loguje tylko prog-id i operacje
+(LOAD/UNLOAD) - bez PID inicjatora trudno powiazac zaladowanie
+programu BPF z konkretnym procesem przy analizie post-incident.
+Uzycie audit_log_untrustedstring() dla comm zapewnia poprawna
+sanityzacje danych niezaufanych (comm jest kontrolowany przez
+uzytkownika przez PR_SET_NAME). Kompatybilne z istniejacymi
+narzedziami auditd/ausearch - nowe pola po standardowym "prog-id=".
+
+---
+ kernel/bpf/syscall.c | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+--- a/kernel/bpf/syscall.c
++++ b/kernel/bpf/syscall.c
+@@ -13,6 +13,9 @@
+ #include <linux/syscalls.h>
+ #include <linux/slab.h>
+ #include <linux/sched/signal.h>
++#ifdef CONFIG_HACKEROS_KERNEL
++#include <linux/sched.h>
++#endif
+ #include <linux/vmalloc.h>
+ #include <linux/mmzone.h>
+ #include <linux/anon_inodes.h>
+@@ -2394,6 +2397,20 @@
+ 		return;
+ 	audit_log_format(ab, "prog-id=%u op=%s",
+ 			 prog->aux->id, bpf_audit_str[op]);
++#ifdef CONFIG_HACKEROS_KERNEL
++	/*
++	 * HackerOS Cybersecurity: rozszerzenie standardowego rekordu
++	 * AUDIT_BPF o PID/comm procesu inicjujacego. eBPF jest
++	 * powtarzajacym sie wektorem lokalnej eskalacji uprawnien (liczne
++	 * CVE w bpf verifier) - ta informacja pozwala narzedziom forensics
++	 * HackerOS szybko odfiltrowac ladowania programow przez procesy
++	 * ktore *nie powinny* miec takich uprawnien w danym kontekscie.
++	 * linux/sched.h jest dolaczany explicite (a nie tylko transytywnie
++	 * przez linux/sched/signal.h) dla stabilnosci miedzy wersjami.
++	 */
++	audit_log_format(ab, " hackeros_loader_pid=%d hackeros_loader_comm=", current->pid);
++	audit_log_untrustedstring(ab, current->comm);
++#endif
+ 	audit_log_end(ab);
+ }
+ 
+-- 
+2.43.0
