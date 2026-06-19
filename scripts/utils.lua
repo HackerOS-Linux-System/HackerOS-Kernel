@@ -204,7 +204,10 @@ end
 -- ---------------------------------------------------------------------
 
 --- Zamienia string wersji na tabele {major, minor, patch}
+-- Akceptuje takze number (np. 7.1 sparsowane z .hk bez cudzyslowu jako
+-- Lua number) - wymusza tostring na wejsciu, zeby v:match nie wybuchlo.
 function Utils.parse_kernel_version(v)
+    v = tostring(v)
     local major, minor, patch = v:match("^(%d+)%.(%d+)%.?(%d*)$")
     if not major then
         return nil
