@@ -134,6 +134,12 @@ local function set_nested(map, key_path, value)
 end
 
 local function split_dots(key)
+    key = trim(key)
+    -- klucz w cudzyslowach jest literalem - kropki wewnatrz nie tworza zagniezdzenia
+    local quoted = key:match('^"(.*)"$')
+    if quoted then
+        return { quoted }
+    end
     local parts = {}
     for part in key:gmatch("[^%.]+") do
         table.insert(parts, part)
