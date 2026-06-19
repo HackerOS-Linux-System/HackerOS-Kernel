@@ -1,0 +1,42 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 9/16] hackeros: bpf_jit_harden domyslnie=2 (constant blinding)
+
+Zmienia wartosc domyslna bpf_jit_harden z 0 (wylaczone) na 2
+(constant blinding dla wszystkich programow), co eliminuje klase
+atakow JIT spraying na BPF - podatnych na exploitacje przez
+przewidywalne ułozenie kodu JIT w pamieci. eBPF jest szeroko
+uzywane w narzedziach cybersecurity HackerOS (tracing, forensics,
+network monitoring), wiec jest to realna linia obrony, a nie
+czysto teoretyczny hardening. Administrator moze nadpisac w
+runtime przez net.core.bpf_jit_harden (sysctl).
+
+---
+ kernel/bpf/core.c | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+--- a/kernel/bpf/core.c
++++ b/kernel/bpf/core.c
+@@ -546,7 +546,21 @@
+ /* All BPF JIT sysctl knobs here. */
+ int bpf_jit_enable   __read_mostly = IS_BUILTIN(CONFIG_BPF_JIT_DEFAULT_ON);
+ int bpf_jit_kallsyms __read_mostly = IS_BUILTIN(CONFIG_BPF_JIT_DEFAULT_ON);
++#ifdef CONFIG_HACKEROS_KERNEL
++/*
++ * HackerOS Cybersecurity: domyslnie wlaczony najwyzszy poziom hardeningu
++ * BPF JIT (constant blinding dla wszystkich nieuprzywilejowanych
++ * programow), w przeciwienstwie do upstreamowej wartosci domyslnej "0"
++ * (wylaczone). eBPF jest szeroko uzywane przez narzedzia obserwowalnosci
++ * i bezpieczenstwa w HackerOS Cybersecurity Edition, wiec JIT spraying
++ * jest realnym wektorem atakow ktory chcemy ograniczyc z pudelka.
++ * Administrator wciaz moze to zmienic w runtime przez
++ * net.core.bpf_jit_harden (sysctl), to jedynie bezpieczniejszy default.
++ */
++int bpf_jit_harden   __read_mostly = 2;
++#else
+ int bpf_jit_harden   __read_mostly;
++#endif
+ long bpf_jit_limit   __read_mostly;
+ long bpf_jit_limit_max __read_mostly;
+ 
+-- 
+2.43.0
