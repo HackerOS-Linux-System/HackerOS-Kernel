@@ -1,4 +1,4 @@
-name: HackerOS Kernel Patch Compatibility
+name: HackerOS Kernel CI
 
 # Domyslny GITHUB_TOKEN ma tylko 'issues: read' - bez tego bloku
 # notify-on-failure dostaje "Resource not accessible by integration"
@@ -8,21 +8,44 @@ permissions:
   issues: write
 
 on:
-  # Uruchamia testy patchy codziennie o 06:00 UTC
+  # Uruchamia testy patchy + smoke-build codziennie o 06:00 UTC
   schedule:
     - cron: '0 6 * * *'
-  # I przy kazdym push / PR do galezi cybersecurity
+    # Pelny produkcyjny build .deb tylko raz w tygodniu (niedziela 03:00 UTC)
+    # - to jest pelna kompilacja jadra (defconfig + Xen + signing), znaczaco
+    # dluzsza niz smoke-build, wiec nie odpalamy jej przy kazdym push/PR.
+    - cron: '0 3 * * 0'
+  # Przy kazdym push / PR do galezi cybersecurity
   push:
     branches: [ cybersecurity ]
     paths:
       - 'patches/**'
       - 'config.hk'
+      - 'config/**'
       - 'scripts/**.lua'
+      - 'build.lua'
   pull_request:
     branches: [ cybersecurity ]
     paths:
       - 'patches/**'
       - 'config.hk'
+      - 'config/**'
+  # Reczne wywolanie z wyborem trybu builda
+  workflow_dispatch:
+    inputs:
+      build_mode:
+        description: 'Tryb budowy .deb'
+        required: true
+        default: 'smoke'
+        type: choice
+        options:
+          - smoke
+          - full
+      kernel_version:
+        description: 'Wersja jadra (puste = auto-detekcja najnowszej stabilnej)'
+        required: false
+        default: ''
+        type: string
 
 jobs:
   # --- Zadanie 1: Lua syntax check (szybki, bez sieci) ---
@@ -145,6 +168,191 @@ jobs:
           # Sprawdz syntax szablonow shell wyekstrahowanych recznie
           # (pelny test shellcheck wymaga wygenerowania przez deb_package.lua)
           echo "Shell syntax check: templates OK (sprawdzany przez sh -n podczas testu deb)"
+
+  # --- Zadanie 5: Smoke-build .deb (--ci-fast, kilka-kilkanascie minut) ---
+  # Buduje PRAWDZIWY pakiet .deb przy uzyciu build.lua --ci-fast: minimalny
+  # config/ci-tiny.config (bez Xen/signing/headers), ale Z PELNYM
+  # patchsetem HackerOS - weryfikuje ze 16 patchy nie tylko sie NAKLADA
+  # (to robi juz job patch-compat-*), ale rowniez SIE KOMPILUJE i daje
+  # instalowalny .deb. To zlapalo realny blad (incompatible-pointer-types
+  # w patchu USB) ktorego samo `patch --dry-run` nigdy by nie wykrylo.
+  build-deb-smoke:
+    name: "Build .deb (smoke, --ci-fast)"
+    runs-on: ubuntu-24.04
+    needs: lua-syntax
+    if: github.event.inputs.build_mode != 'full' && github.event.schedule != '0 3 * * 0'
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y lua5.4 curl patch \
+            build-essential bc flex bison libssl-dev libelf-dev \
+            dpkg-dev fakeroot xz-utils libncurses-dev openssl ccache
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ${{ runner.os }}-ccache-smoke-${{ github.event.inputs.kernel_version || '7.1' }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-smoke-
+
+      - name: Cache downloaded kernel source tarball
+        uses: actions/cache@v4
+        with:
+          path: build/*.tar.xz
+          key: ${{ runner.os }}-kernel-src-${{ github.event.inputs.kernel_version || '7.1' }}
+
+      - name: Configure ccache
+        run: |
+          mkdir -p ~/.ccache
+          export CCACHE_DIR=~/.ccache
+          ccache --max-size=2G
+          ccache --zero-stats || true
+
+      - name: "Build .deb (smoke-build, --ci-fast)"
+        run: |
+          VERSION_ARG=""
+          if [ -n "${{ github.event.inputs.kernel_version }}" ]; then
+            VERSION_ARG="--version=${{ github.event.inputs.kernel_version }}"
+          fi
+          export CCACHE_DIR=~/.ccache
+          lua5.4 build.lua --ci-fast --keep-going $VERSION_ARG
+        env:
+          TERM: dumb
+
+      - name: Show ccache stats
+        if: always()
+        run: |
+          export CCACHE_DIR=~/.ccache
+          ccache --show-stats || true
+
+      - name: Verify .deb was produced
+        run: |
+          DEB_FILE=$(ls dist/*.deb 2>/dev/null | head -n1)
+          if [ -z "$DEB_FILE" ]; then
+            echo "::error::Brak wygenerowanego pliku .deb w dist/"
+            exit 1
+          fi
+          echo "Wygenerowano: $DEB_FILE"
+          dpkg-deb --info "$DEB_FILE"
+          echo ""
+          echo "=== Zawartosc pakietu ==="
+          dpkg-deb --contents "$DEB_FILE"
+
+      - name: Lintian check (jesli dostepny)
+        run: |
+          sudo apt-get install -y lintian || true
+          if command -v lintian >/dev/null 2>&1; then
+            lintian dist/*.deb || echo "::warning::lintian zglosil ostrzezenia (nie blokujace)"
+          fi
+
+      - name: Upload .deb artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hackeros-kernel-smoke-deb
+          path: |
+            dist/*.deb
+            logs/*.log
+          retention-days: 14
+          if-no-files-found: warn
+
+  # --- Zadanie 6: Pelny produkcyjny build .deb (defconfig + Xen + signing) ---
+  # Pelna kompilacja zgodna z config.hk produkcyjnym (bez --ci-fast):
+  # Xen dom0/domU, podpisywanie modulow (klucz X.509), pakiet naglowkow
+  # DKMS. Znacznie dluzsza niz smoke-build (defconfig kompiluje wiecej
+  # sterownikow/modulow) - uruchamiana tylko co tydzien lub recznie
+  # (workflow_dispatch -> build_mode: full).
+  build-deb-full:
+    name: "Build .deb (full production build)"
+    runs-on: ubuntu-24.04
+    needs: lua-syntax
+    if: github.event.inputs.build_mode == 'full' || github.event.schedule == '0 3 * * 0'
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y lua5.4 curl patch \
+            build-essential bc flex bison libssl-dev libelf-dev \
+            dpkg-dev fakeroot xz-utils libncurses-dev openssl ccache \
+            dwarves
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: ~/.ccache
+          key: ${{ runner.os }}-ccache-full-${{ github.event.inputs.kernel_version || '7.1' }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-full-
+
+      - name: Cache downloaded kernel source tarball
+        uses: actions/cache@v4
+        with:
+          path: build/*.tar.xz
+          key: ${{ runner.os }}-kernel-src-${{ github.event.inputs.kernel_version || '7.1' }}
+
+      - name: Configure ccache
+        run: |
+          mkdir -p ~/.ccache
+          export CCACHE_DIR=~/.ccache
+          ccache --max-size=5G
+          ccache --zero-stats || true
+
+      - name: "Build .deb (full production build)"
+        run: |
+          VERSION_ARG=""
+          if [ -n "${{ github.event.inputs.kernel_version }}" ]; then
+            VERSION_ARG="--version=${{ github.event.inputs.kernel_version }}"
+          fi
+          export CCACHE_DIR=~/.ccache
+          lua5.4 build.lua --keep-going --jobs=$(nproc) $VERSION_ARG
+        env:
+          TERM: dumb
+
+      - name: Show ccache stats
+        if: always()
+        run: |
+          export CCACHE_DIR=~/.ccache
+          ccache --show-stats || true
+
+      - name: Verify .deb packages were produced
+        run: |
+          KERNEL_DEB=$(ls dist/hackeros-kernel-cybersecurity_*.deb 2>/dev/null | head -n1)
+          HEADERS_DEB=$(ls dist/hackeros-kernel-headers-cybersecurity_*.deb 2>/dev/null | head -n1)
+
+          if [ -z "$KERNEL_DEB" ]; then
+            echo "::error::Brak pakietu jadra w dist/"
+            exit 1
+          fi
+          echo "Pakiet jadra: $KERNEL_DEB"
+          dpkg-deb --info "$KERNEL_DEB"
+
+          if [ -n "$HEADERS_DEB" ]; then
+            echo "Pakiet naglowkow: $HEADERS_DEB"
+            dpkg-deb --info "$HEADERS_DEB"
+          else
+            echo "::warning::Brak pakietu naglowkow (headers_package.enabled=false?)"
+          fi
+
+      - name: Upload .deb + signing key artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hackeros-kernel-full-deb
+          path: |
+            dist/*.deb
+            build/keys/*.crt
+            logs/*.log
+          retention-days: 30
+          if-no-files-found: warn
+
 
   # --- Powiadomienie przez GitHub Issues przy wykryciu niezgodnosci ---
   # Ograniczone do schedule/push: pull_request (zwlaszcza z forka) zawsze
