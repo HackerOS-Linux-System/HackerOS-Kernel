@@ -47,6 +47,7 @@ local function parse_args(argv)
         keep_going   = false,
         no_sign      = false,
         no_headers   = false,
+        ci_fast      = false,
     }
     for _, a in ipairs(argv or {}) do
         if a == "--help" or a == "-h" then
@@ -56,6 +57,7 @@ local function parse_args(argv)
         elseif a == "--keep-going"   then opts.keep_going   = true
         elseif a == "--no-sign"      then opts.no_sign      = true
         elseif a == "--no-headers"   then opts.no_headers   = true
+        elseif a == "--ci-fast"      then opts.ci_fast      = true
         elseif a:match("^%-%-version=") then opts.version     = a:match("^%-%-version=(.+)$")
         elseif a:match("^%-%-jobs=")    then opts.jobs        = a:match("^%-%-jobs=(.+)$")
         elseif a:match("^%-%-config=")  then opts.config_path = a:match("^%-%-config=(.+)$")
@@ -81,13 +83,18 @@ Opcje:
   --keep-going         Kontynuuje mimo bledow niekrytycznych
   --no-sign             Pomija generowanie kluczy i podpisywanie modulow
   --no-headers          Nie buduje odrebnego pakietu naglowkow
-  --help, -h             Wyswietla pomoc
+  --ci-fast              Preset szybkiego smoke-buildu: config/ci-tiny.config
+                         zamiast pelnego base_config, bez Xen/signing/headers.
+                         Weryfikuje TYLKO ze patche sie kompiluja - NIE jest
+                         to konfiguracja produkcyjna HackerOS Kernel.
+  --help, -h              Wyswietla pomoc
 
 Przyklady:
   lua5.5 build.lua
   lua5.5 build.lua --version=7.3 --jobs=16
   lua5.5 build.lua --no-download --skip-patches --keep-going
   lua5.5 build.lua --no-sign --no-headers   (szybszy build bez extra paczek)
+  lua5.5 build.lua --ci-fast                (smoke-build do CI, kilka minut)
 ]])
 end
 
@@ -104,7 +111,7 @@ local function check_dependencies(opts)
     Utils.log("Sprawdzanie wymaganych narzedzi...")
     local missing = {}
     for _, tool in ipairs(REQUIRED_TOOLS) do
-        if tool == "openssl" and opts.no_sign then goto skip end
+        if tool == "openssl" and (opts.no_sign or opts.ci_fast) then goto skip end
         if not Utils.run("command -v " .. tool .. " > /dev/null 2>&1", true) then
             table.insert(missing, tool)
         end
@@ -170,11 +177,32 @@ local function main()
         cfg.headers_package.enabled = false
     end
 
+    if opts.ci_fast then
+        Utils.warn("--ci-fast: preset smoke-buildu CI aktywny.")
+        Utils.warn("To NIE jest konfiguracja produkcyjna HackerOS Kernel!")
+        cfg.build.base_config = "config/ci-tiny.config"
+        cfg.signing.sign_modules = false
+        if cfg.headers_package then cfg.headers_package.enabled = false end
+        -- Xen wymaga sporo zaleznosci (CONFIG_PARAVIRT i in.) ktorych
+        -- ci-tiny.config nie ma - wylaczamy zeby kconfig.lua nie
+        -- generowal fragmentu, ktorego olddefconfig nie da sie spelnic
+        -- bez pelnego base_config.
+        cfg.xen.enabled = false
+        -- module_sig wymaga CONFIG_MODULE_SIG_KEY - bez signing.lua
+        -- wywolanego w tym presecie zostawiamy domyslny klucz kernela,
+        -- wiec wylaczamy force, zeby nie blokowac smoke-buildu.
+        cfg.hardening.module_sig = false
+        cfg.hardening.module_sig_force = false
+    end
+
     Utils.ok("Konfiguracja: " .. cfg.metadata.name .. " (branch: " .. cfg.metadata.branch .. ")")
     Utils.info("Patchy w patchsecie: " .. #cfg.patches.apply_order)
     Utils.info("Runtime hardening: sysctl + GRUB_CMDLINE")
     Utils.info("Podpisywanie modulow: " .. (cfg.signing.sign_modules and "TAK" or "NIE"))
     Utils.info("Pakiet naglowkow: " .. ((cfg.headers_package and cfg.headers_package.enabled) and "TAK" or "NIE"))
+    if opts.ci_fast then
+        Utils.info("Tryb: CI-FAST SMOKE BUILD (config/ci-tiny.config, Xen wylaczony)")
+    end
 
     -- [2/8] Zaleznosci ---------------------------------------------------
     Utils.step(2, TOTAL_STEPS, "Walidacja zaleznosci systemowych")
