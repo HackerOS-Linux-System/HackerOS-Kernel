@@ -1,150 +1,159 @@
 # Architektura build systemu HackerOS Kernel
 
-Ten dokument opisuje przeplyw danych i kolejnosc dzialan w `build.lua`,
-przydatny przy debugowaniu lub rozszerzaniu build systemu.
-
-## Strategia patchowania: append-only na koncu plikow
-
-Jadro Linux zmienia sie szybko miedzy wersjami — linie kodu w srodku
-plikow takich jak `kernel/ptrace.c` czy `net/core/dev.c` przesuwaja sie
-lub zmieniaja kontekst praktycznie przy kazdym wydaniu. Klasyczny patch
-dopasowany do konkretnych linii w środku pliku (np. "wstaw kod po linii
-80 w funkcji X") bardzo szybko traci zdolnosc czystej aplikacji.
-
-Z tego powodu **wszystkie 8 patchy HackerOS sa pisane jako bloki kodu
-dopisywane na koncu odpowiedniego pliku**, otoczone `#ifdef
-CONFIG_HACKEROS_KERNEL` / `#endif`. Koniec pliku jest najbardziej
-stabilnym mozliwym punktem zaczepienia w unified diff — niezaleznie od
-tego, ile kodu zmieni sie w środku pliku miedzy wersjami 7.1 i np. 7.5,
-ostatnia linia pliku (i tym samym kontekst potrzebny `patch(1)`) zwykle
-pozostaje rozpoznawalna.
-
-Kazdy patch w `patches/` zostal wygenerowany i zweryfikowany
-(`patch -p1 --dry-run`) wzgledem aktualnego drzewa `torvalds/linux`
-(branch `master`, stan w trakcie tworzenia tego build systemu), wiec
-sa to **realne, dzialajace diffy**, a nie wylacznie ilustracyjne
-przyklady skladni.
-
-Kompromis tego podejscia: kod dodawany przez patche jest celowo
-"addytywny" (nowe symbole, nowe staticzne zmienne, nowe initcalle) a
-nie modyfikuje bezposrednio logiki istniejacych funkcji upstreamu —
-co jest bezpieczniejsze dla utrzymania kompatybilnosci, ale oznacza, ze
-faktyczne wymuszanie wartosci hardeningowych (np. realne ustawienie
-`randomize_kstack_offset` w runtime) odbywa siê przede wszystkim przez
-fragment `.config` generowany przez `kconfig.lua`, a patche C dostarczaja
-glownie znaczniki/branding/komunikaty diagnostyczne uzupelniajace ten
-mechanizm. Jesli potrzebujesz głebszej integracji (np. faktycznej zmiany
-logiki istniejacej funkcji), zalecane jest dopisanie wlasnego patcha
-dopasowanego recznie do konkretnej, uzywanej przez Ciebie wersji jadra.
-
-## Przeplyw budowy (7 krokow)
+## Przeplyw budowy (8 krokow)
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│ [1/7] Wczytanie config.hk                                            │
-│   - hk_parser.lua: parse() + resolve_interpolations()                │
-│   - walidacja obecnosci [metadata]/[source]/[package]                │
-│   - nadpisania z CLI (--version, --jobs)                              │
-└─────────────────────────────────────────────────────────────────────┘
-              │
-              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ [2/7] Walidacja zaleznosci systemowych                                │
-│   - sprawdzenie: make, gcc, bc, flex, bison, dpkg-deb, patch...       │
-└─────────────────────────────────────────────────────────────────────┘
-              │
-              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ [3/7] Przygotowanie zrodel jadra (source.lua)                         │
-│   - jesli auto_latest: zapytanie kernel.org/releases.json             │
-│   - pobranie tarballa (curl/wget) + weryfikacja sha256                │
-│   - rozpakowanie do src/linux-X.Y/ + symlink src/linux                │
-└─────────────────────────────────────────────────────────────────────┘
-              │
-              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ [4/7] Nakladanie patchy (patches.lua)                                  │
-│   - iteracja po [patches].apply_order z config.hk                      │
-│   - dry-run kazdego patcha przed faktyczna aplikacja                   │
-│   - marker .hackeros-patches-applied zapobiega duplikacji               │
-└─────────────────────────────────────────────────────────────────────┘
-              │
-              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ [5/7] Generowanie .config (kconfig.lua)                                │
-│   - mapowanie [hardening]/[xen]/[cybersecurity_subsystems] -> CONFIG_* │
-│   - merge_config.sh: base.config + fragments/*.config + auto fragment  │
-│   - make olddefconfig (dopelnienie zaleznosci Kconfig)                  │
-└─────────────────────────────────────────────────────────────────────┘
-              │
-              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ [6/7] Kompilacja (compile.lua)                                          │
-│   - make -jN bzImage modules (z opcjonalnym ccache)                     │
-│   - make INSTALL_MOD_PATH=DESTDIR modules_install                        │
-│   - kopiowanie bzImage/System.map/config do DESTDIR/boot                  │
-└─────────────────────────────────────────────────────────────────────┘
-              │
-              ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│ [7/7] Budowa pakietu .deb (deb_package.lua)                              │
-│   - kopiowanie DESTDIR -> debian-build/                                   │
-│   - generowanie DEBIAN/control, postinst, prerm, postrm                   │
-│   - dpkg-deb --build                                                       │
-└─────────────────────────────────────────────────────────────────────┘
+[1/8] Wczytanie config.hk (hk_parser: parse + resolve_interpolations)
+[2/8] Walidacja zaleznosci systemowych (make, gcc, openssl, ...)
+[3/8] Przygotowanie zrodel jadra (source.lua: auto_latest, sha256 check)
+[4/8] Nakladanie 16-patchowego patchsetu (patches.lua: dry-run + marker)
+[5/8] Generowanie .config (kconfig.lua) + klucze podpisywania (signing.lua)
+[6/8] Kompilacja jadra + DESTDIR + HEADERS_DESTDIR (compile.lua)
+[7/8] Budowa 2x .deb: jadro + naglowki (deb_package.lua + runtime_hardening.lua)
+[8/8] Podsumowanie (output paths, instrukcje MOK enrollment)
 ```
 
-## Dlaczego osobne moduly Lua, a nie jeden duzy plik?
+Kazdy krok niekrytyczny (4, 5, klucze, naglowki, pakowanie headers) jest
+opakowany w `pcall` + `soft_error(opts, msg)`, ktora respektuje
+`--keep-going`: przy bledzie ostrzega i kontynuuje, zamiast przerywac
+caly proces. Krok 6 (kompilacja) jest zawsze krytyczny — bez skompilowanego
+jadra nic dalej nie ma sensu.
 
-`build.lua` jest punktem wejscia (entry point) i orkiestratorem — caly
-ciezar logiki jest w `scripts/*.lua`, kazdy modul odpowiada za jedna,
-spójna odpowiedzialnosc (SRP). Dzieki temu:
+## Trzy warstwy hardeningu i dlaczego sa rozdzielone
 
-- mozna testowac/uruchamiac kazdy modul niezaleznie (np. `lua5.5 -e
-  "print(require('scripts.hk_parser').load_hk_file('config.hk'))"`),
-- dodanie wsparcia dla nowego formatu pakietu (np. `.rpm`) wymaga
-  dodania nowego modulu `rpm_package.lua` bez dotykania reszty kodu,
-- `build.lua` pozostaje krotki i czytelny jako "spis tresci" calego
-  procesu budowy.
+### Warstwa 1: Kconfig (`kconfig.lua`)
 
-## Mechanizm `auto_latest` (wsparcie dla Linux 7.1+)
+CONFIG_* wkompilowane w binarke jadra. Zmiana wymaga przebudowy.
+Najsilniejsza forma hardeningu (nie da sie obejsc w runtime bez
+przeladowania jadra), ale najmniej elastyczna.
 
-`scripts/source.lua` implementuje detekcje najnowszej wersji stabilnej
-poprzez zapytanie do `https://www.kernel.org/releases.json` i lekkie
-parsowanie wzorcem `"moniker":"stable"` + sasiadujace pole `"version"`
-(bez zewnetrznej biblioteki JSON — Lua 5.5 standardowo jej nie ma, a
-dodawanie zaleznosci tylko do sparsowania jednego pola nie byloby
-uzasadnione).
+### Warstwa 2: Runtime hardening (`runtime_hardening.lua`)
 
-Logika wyboru wersji:
+Boot params (`GRUB_CMDLINE_LINUX_DEFAULT`) i sysctl
+(`/etc/sysctl.d/99-hackeros-cybersec.conf`). To **oficjalne,
+dokumentowane interfejsy ABI Linuksa** — stabilne miedzy wersjami jadra
+w odroznieniu od linii kodu w srodku plikow `.c`. Administrator moze
+je swiadomie nadpisac po instalacji, co jest pozadane (hardening
+"z pudelka", nie "zabetonowany"). Zweryfikowano w dokumentacji kernela
+(`Documentation/admin-guide/kernel-parameters.txt`) i kodzie zrodlowym
+(np. `kernel/bpf/core.c`: `int bpf_jit_harden __read_mostly;` = sysctl
+`net.core.bpf_jit_harden`).
 
-1. Jesli `--version=X.Y` podane w CLI → uzyj jej bezposrednio (auto_latest
-   zostaje wylaczone na ten przebieg).
-2. Inaczej, jesli `[source].auto_latest = true` → zapytaj kernel.org,
-   porownaj wynik z `[source].min_version` (`Utils.compare_versions`).
-   Jesli wynik jest nowszy lub rowny minimum, uzyj go.
-3. Inaczej (lub jesli zapytanie sieciowe sie nie powiodlo) → uzyj
-   `[source].base_version` z `config.hk`.
-4. Niezaleznie od powyzszego, finalna wersja jest zawsze sprawdzana
-   wzgledem `[source].min_version` — jesli jest nizsza, build sie
-   przerywa z bledem. To gwarantuje, ze `build.lua` nigdy nie zbuduje
-   jadra starszego niz deklarowane minimum (domyslnie 7.1), nawet jesli
-   ktos recznie wpisze stara wersje w `config.hk`.
+### Warstwa 3: Patchset C (`patches/0001`-`0016`)
 
-Dzieki temu mechanizmowi `build.lua` **nie wymaga modyfikacji kodu** przy
-kazdym nowym wydaniu jadra Linux — automatycznie "rusza" wraz z nowymi
-wersjami stabilnymi, o ile API `kernel.org/releases.json` pozostanie
-stabilne.
+Realne zmiany kodu, podzielone na dwie kategorie:
+
+- **Patche 1-8**: infrastruktura (branding `CONFIG_HACKEROS_KERNEL`) i
+  znaczniki/komunikaty diagnostyczne uzywane przez pozostale patche i
+  narzedzia HackerOS. Append-only na koncu plikow dla maksymalnej
+  trwalosci miedzy wersjami.
+- **Patche 9-16**: funkcjonalne zmiany semantyki - zmieniaja faktyczne
+  wartosci startowe zmiennych jadra (`bpf_jit_harden`, `ptrace_scope`)
+  lub dodaja audit hooki w realnych punktach decyzyjnych (TCP-MD5,
+  USB authorize, module signing reject, Xen malicious frontend, eBPF
+  load, lockdown change). Kazdy zweryfikowany `patch --dry-run` na
+  aktualnym `torvalds/linux` (zobacz `scripts/test_patches.lua`).
+
+**Dlaczego nie wszystko jako patch C?** Bo runtime hardening (warstwa 2)
+jest bardziej stabilny miedzy wersjami niz patch zaczepiony o konkretne
+linie kodu. `randomize_kstack_offset` jest realizowane jako boot param
+(warstwa 2), NIE jako patch zmieniajacy `DEFINE_STATIC_KEY_FALSE` w
+`kernel/entry/common.c` (co byloby krucha, bo ta linia historycznie sie
+przenosila miedzy plikami). Decyzja "patch C vs runtime ABI" byla
+podejmowana indywidualnie dla kazdego mechanizmu na podstawie tego, czy
+istnieje stabilny, dokumentowany interfejs runtime.
+
+## Strategia patchowania: anchory i forward declarations
+
+Wszystkie patche 9-16 uzywaja wzorca:
+
+1. **Forward declaration** funkcji audytu/hooka bezposrednio po ostatnim
+   `#include` (stabilny anchor — sekcja includow rzadko się przegrupowuje
+   drastycznie).
+2. **Jednolinijkowe wywolanie** hooka w miejscu decyzyjnym (np. po
+   `hlist_add_head_rcu(...)` w `__tcp_md5_do_add`) — minimalna powierzchnia
+   konfliktu, bo to pojedyncza linia dodana, nie zmiana wielu linii.
+3. **Definicja funkcji append-only** na koncu pliku — zero ryzyka
+   konfliktu z dalszymi zmianami w pliku.
+
+Przyklad (patch 11, TCP-MD5 audit):
+```c
+// 1. forward declaration (po #include <trace/events/tcp.h>)
+#ifdef CONFIG_HACKEROS_KERNEL
+static void hackeros_tcp_md5_audit_log(const struct sock *sk, int family, u8 keylen);
+#endif
+
+// 2. wywolanie w __tcp_md5_do_add (po hlist_add_head_rcu)
+#ifdef CONFIG_HACKEROS_KERNEL
+hackeros_tcp_md5_audit_log(sk, family, newkeylen);
+#endif
+
+// 3. definicja na koncu pliku
+#ifdef CONFIG_HACKEROS_KERNEL
+static void hackeros_tcp_md5_audit_log(...) { pr_info(...); }
+#endif
+```
+
+Niektore patche (9, 10) sa jeszcze prostsze - zmieniaja tylko wartosc
+inicjalizacji zmiennej modulowej (`int bpf_jit_harden __read_mostly = 2;`)
+bez zadnego wywolania funkcji, co jest najmniejsza mozliwa powierzchnia
+zmiany.
+
+## Podpisywanie modulow (`signing.lua`)
+
+```
+ensure_module_signing_key(cfg)
+  -> openssl req -new -nodes -x509 -addext basicConstraints=critical,CA:FALSE
+                 -addext keyUsage=digitalSignature
+                 -addext extendedKeyUsage=codeSigning
+                 -newkey rsa:4096 -keyout priv.key -out cert.crt
+  -> combined.pem = priv.key + cert.crt (format wymagany przez CONFIG_MODULE_SIG_KEY)
+
+inject_into_kernel_config(cfg, kernel_src, combined.pem)
+  -> .config: CONFIG_MODULE_SIG_KEY="/abs/path/combined.pem"
+
+install_for_dkms(cfg, deb_root, combined.pem, cert.crt)
+  -> deb_root/usr/share/hackeros-kernel/signing-key/module-signing.pem (chmod 0600)
+  -> deb_root/usr/share/hackeros-kernel/signing-key/module-signing.crt (chmod 0644)
+  -> deb_root/usr/share/hackeros-kernel/hackeros-sign-module.sh
+```
+
+Klucz jest generowany **raz** i zachowywany w `signing.keys_dir`
+(domyslnie `./build/keys`) — kolejne wywolania `build.lua` reuzywaja
+ten sam klucz (`ensure_*` sprawdza obecnosc przed generowaniem), co
+gwarantuje, ze moduly podpisane przy poprzednim buildzie wciaz sa
+zaufane przez nowe jadro (o ile uzywasz tej samej instalacji build
+systemu).
 
 ## Idempotencja i ponowne uruchamianie
 
-- Pobrane tarballe nie sa sciagane ponownie, jesli juz istnieja w
-  `build/` (`Utils.file_exists`).
-- Rozpakowane zrodla nie sa rozpakowywane ponownie, jesli katalog
-  `src/linux-X.Y/Makefile` juz istnieje.
-- Patche nie sa nakladane ponownie, jesli istnieje marker
-  `.hackeros-patches-applied` w drzewie zrodel.
-- Dzieki temu mozna bezpiecznie przerwac i ponownie wywolac
-  `lua5.5 build.lua` bez koniecznosci czyszczenia wszystkiego od zera —
-  a w razie potrzeby pelnego resetu wystarczy `rm -rf src/ build/ dist/
-  debian-build*`.
+- Tarballe/zrodla/patche: jak w poprzedniej wersji (markery, sprawdzanie istnienia).
+- **Klucze podpisywania**: generowane tylko jesli `combined.pem` i `priv.key`
+  jeszcze nie istnieja w `keys_dir`.
+- **GRUB_CMDLINE w postinst**: marker `# hackeros_cmdline_applied` w
+  `/etc/default/grub` zapobiega wielokrotnemu dopisywaniu tych samych
+  parametrow przy reinstalacji/upgrade pakietu.
+- **Rollback safety net**: `postinst` tworzy backup `grub.cfg` i
+  `/etc/default/grub` PRZED jakakolwiek modyfikacja
+  (`/var/lib/hackeros-kernel/grub.cfg.pre-<timestamp>`), a `postrm`
+  przywraca `/etc/default/grub` z backupu przy `purge`.
+
+## CI: `scripts/test_patches.lua` + GitHub Actions
+
+`test_patches.lua` pobiera **tylko pliki dotykane przez patche** (lista
+`PATCH_TOUCHED_FILES`, 17 plikow) z `raw.githubusercontent.com/torvalds/linux`,
+testuje `patch --dry-run` sekwencyjnie (z faktyczna aplikacja miedzy
+krokami, zeby kolejne patche widzialy poprawny kontekst), i generuje
+raport z exit code 0/1. `.github/workflows/ci.yml` uruchamia
+to codziennie + przy zmianach w `patches/`/`config.hk`, na najnowszej
+wersji stabilnej oraz matrycy konkretnych wersji, i automatycznie
+otwiera GitHub Issue przy wykryciu niezgodnosci.
+
+Ten sam workflow zawiera rowniez `build-deb-smoke` (codziennie +
+push/PR, `build.lua --ci-fast`) i `build-deb-full` (co tydzien/recznie,
+pelny produkcyjny build) - oba publikuja wygenerowany `.deb` jako
+artefakt workflow. `build-deb-smoke` wykrywa bledy kompilacji, ktorych
+sam `patch --dry-run` nie jest w stanie zlapac (np. forward declaration
+typu wstrzykniete przed jego pelna definicja w naglowku - tak wlasnie
+zostal znaleziony i naprawiony blad w patchu 0012 podczas tworzenia
+tego projektu).
