@@ -168,7 +168,19 @@ function Kconfig.merge_and_finalize(cfg, kernel_src_path, generated_fragment_pat
     local merge_script = kernel_src_path .. "/scripts/kconfig/merge_config.sh"
 
     if Utils.file_exists(merge_script) then
-        local frags_str = table.concat(fragment_paths, " ")
+        -- merge_config.sh jest wolane po 'cd kernel_src_path', wiec
+        -- wzgledne sciezki fragmentow (np. config/fragments/x.config,
+        -- relatywne do CWD procesu build.lua) trzeba najpierw zamienic
+        -- na absolutne - inaczej merge_config.sh szuka ich wewnatrz
+        -- drzewa zrodel jadra, gdzie nie istnieja, i pada z bledem
+        -- "does not exist".
+        local abs_fragment_paths = {}
+        for _, fp in ipairs(fragment_paths) do
+            local abs = Utils.capture("readlink -f '" .. fp .. "' 2>/dev/null")
+            table.insert(abs_fragment_paths, (abs and abs ~= "") and abs or fp)
+        end
+
+        local frags_str = table.concat(abs_fragment_paths, " ")
         Utils.run_or_die(
             string.format("cd '%s' && ./scripts/kconfig/merge_config.sh -m .config %s",
                 kernel_src_path, frags_str),
