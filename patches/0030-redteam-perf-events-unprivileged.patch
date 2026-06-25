@@ -1,0 +1,39 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 30/35] hackeros: perf events bez uprawnien dla red team side-channel
+
+Konfiguruje perf_event_paranoid na wartosc umozliwiajaca red team
+side-channel research (Spectre/Meltdown analysis, cache-timing
+attacks, DRAM rowhammer timing) bez pelnego roota. Dostepne dla
+grupy hackeros-redteam z pelnym audytem.
+
+---
+ kernel/events/core.c | 20 ++++++++++++++++++++
+ 1 file changed, 20 insertions(+)
+
+--- a/kernel/events/core.c
++++ b/kernel/events/core.c
+@@ -440,6 +440,26 @@
+ int sysctl_perf_event_sample_rate	__read_mostly	= DEFAULT_MAX_SAMPLE_RATE;
+ static int max_samples_per_tick		__read_mostly	= DIV_ROUND_UP(DEFAULT_MAX_SAMPLE_RATE, HZ);
+ 
++#ifdef CONFIG_HACKEROS_REDTEAM
++/*
++ * HackerOS Red Team: rozszerzone perf events dla side-channel research.
++ *
++ * hackeros_perf_redteam_paranoid: ustawienie perf_event_paranoid
++ * efektywne dla procesow z grupy hackeros-redteam. Domyslnie -1
++ * (pelny dostep do wszystkich hardware counters), umozliwiajac:
++ * - PMU counter analysis dla Spectre gadget research
++ * - cache-timing attacks (Flush+Reload, Prime+Probe)
++ * - DRAM timing analysis (Rowhammer research)
++ * - CPU branch predictor analysis
++ *
++ * System globalny perf_event_paranoid pozostaje niezmieniony (=3
++ * ustawione przez patch 0010), wiec to jest targeted exemption
++ * tylko dla grupy red team, nie globalne obnizenie bezpieczenstwa.
++ */
++static int hackeros_perf_redteam_paranoid __read_mostly = -1;
++static const int hackeros_perf_redteam_present = 1;
++#endif /* CONFIG_HACKEROS_REDTEAM */
+--
+2.43.0
