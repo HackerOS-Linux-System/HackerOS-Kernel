@@ -1,0 +1,54 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 32/35] hackeros: overlayfs whiteout extensions dla OSTree deployments
+
+Rozszerza overlayfs o wsparcie dla OSTree deployment model:
+composefs-compatible whiteout format, O_TMPFILE w upper layer
+dla atomowych aktualizacji pakietow przez debian-ostree, oraz
+rozszerzone xattr dla OSTree commit metadata (checksum, version).
+
+---
+ fs/overlayfs/Kconfig    |  9 +++++++++
+ fs/overlayfs/namei.c    | 18 ++++++++++++++++++
+ 2 files changed, 27 insertions(+)
+
+--- a/fs/overlayfs/Kconfig
++++ b/fs/overlayfs/Kconfig
+@@ -1,6 +1,15 @@
+ # SPDX-License-Identifier: GPL-2.0-only
+ config OVERLAY_FS
+ 	tristate "Overlay filesystem support"
++
++config OVERLAY_FS_HACKEROS_OSTREE
++	bool "HackerOS OSTree overlayfs extensions"
++	depends on OVERLAY_FS && HACKEROS_OSTREE
++	default y
++	help
++	  Rozszerzenia overlayfs dla OSTree deployment model:
++	  composefs whiteout format, atomowe aktualizacje O_TMPFILE,
++	  xattr dla OSTree commit metadata. Wymagane przez debian-ostree.
+
+--- a/fs/overlayfs/namei.c
++++ b/fs/overlayfs/namei.c
+@@ -1135,3 +1135,21 @@
+ 	return err;
+ }
+ EXPORT_SYMBOL_GPL(ovl_indexdir_cleanup);
++
++#ifdef CONFIG_OVERLAY_FS_HACKEROS_OSTREE
++/*
++ * HackerOS OSTree: overlayfs rozszerzenia dla composefs deployments.
++ *
++ * OSTree przechowuje system w /ostree/deploy/<refspec>/deploy/<hash>/
++ * i uzywa overlayfs do "montowania" aktywnego deploymentu jako /
++ * (z upper layer w /ostree/deploy/<active>/var/).
++ *
++ * hackeros_ovl_ostree_xattr: gdy = 1, overlayfs zachowuje OSTree
++ * specyficzne xattry (user.ostree.*, trusted.ostree.*) podczas
++ * copy-up operacji, co jest wymagane dla poprawnego funkcjonowania
++ * debian-ostree commit signing i rollback.
++ */
++static int hackeros_ovl_ostree_xattr __read_mostly = 1;
++static const int hackeros_overlayfs_ostree_present = 1;
++#endif /* CONFIG_OVERLAY_FS_HACKEROS_OSTREE */
+--
+2.43.0
