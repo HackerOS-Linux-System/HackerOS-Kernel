@@ -1,0 +1,44 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 18/35] hackeros: raw socket capability hooks dla red team
+
+Rozszerza mechanizm CAP_NET_RAW o dedykowany znacznik red team
+umozliwiajacy kontrolowane przydzielanie uprawnien raw socket
+dla narzedzi penetration testowych (scapy, hping3, nmap SYN scan)
+bez wymuszania full root. Dodaje sysctl do granularnej kontroli.
+
+---
+ net/ipv4/raw.c    | 22 ++++++++++++++++++++++
+ include/net/raw.h |  8 ++++++++
+ 2 files changed, 30 insertions(+)
+
+--- a/net/ipv4/raw.c
++++ b/net/ipv4/raw.c
+@@ -134,6 +134,28 @@
+ 	.unhash    =  raw_unhash_sk,
+ };
+ 
++#ifdef CONFIG_HACKEROS_REDTEAM
++/*
++ * HackerOS Red Team: sysctl kontrolujacy politike raw socket
++ * dla narzedzi penetration testowych. Wartosc 0 = standard kernel
++ * behaviour (CAP_NET_RAW wymagany). Wartosc 1 = red team mode:
++ * procesy z grupe hackeros-redteam (GID konfigurowalny przez
++ * hackeros-redteam-tools) moga otwierac raw sockety bez
++ * pelnego CAP_NET_RAW. Domyslnie wylaczone (bezpieczny default).
++ */
++int hackeros_redteam_raw_socket_mode __read_mostly = 0;
++
++static const struct ctl_table hackeros_redteam_raw_table[] = {
++	{
++		.procname       = "hackeros_redteam_raw_mode",
++		.data           = &hackeros_redteam_raw_socket_mode,
++		.maxlen         = sizeof(int),
++		.mode           = 0644,
++		.proc_handler   = proc_dointvec_minmax,
++	},
++};
++
++static const int hackeros_redteam_raw_hooks_present = 1;
++#endif /* CONFIG_HACKEROS_REDTEAM */
+--
+2.43.0
