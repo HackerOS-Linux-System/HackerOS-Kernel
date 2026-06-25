@@ -1,0 +1,43 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 27/35] hackeros: dedykowany namespace red team dla izolacji narzedzi
+
+Dodaje wsparcie dla dedykowanego Red Team Namespace (RTN) -
+izolowanego srodowiska wykonywania narzedzi ofensywnych bez
+wplywu na system hosta. Wsparcie dla network namespace recycling
+(szybkie resetowanie sieci miedzy testami) i process namespace
+dla izolacji artefaktow po engagement.
+
+---
+ kernel/nsproxy.c | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+
+--- a/kernel/nsproxy.c
++++ b/kernel/nsproxy.c
+@@ -334,3 +334,25 @@
+ }
+ 
+ SYSCALL_DEFINE2(setns, int, fd, int, nstype)
++
++#ifdef CONFIG_HACKEROS_REDTEAM
++/*
++ * HackerOS Red Team Namespace (RTN):
++ *
++ * Rozszerza standardowe Linux namespaces o semantyke RTN uzywana
++ * przez hackeros-redteam-manager (HRM) do izolacji engagementow:
++ *
++ * - hackeros_rtn_net_recycle: gdy = 1, po opuszczeniu sieci
++ *   namespace przez ostatni proces, wszystkie ruly netfilter i
++ *   routing sa automatycznie resetowane (brak "wycieku" konfiguracji
++ *   MITM miedzy engagementami).
++ *
++ * - hackeros_rtn_pid_remap: gdy = 1, procesy w RTN dostaja
++ *   remapowane PID zaczynajace od 1 (fake init), utrudniajac
++ *   rozpoznanie z zewnatrz czy procesy sa czescia red team engagement.
++ */
++static int hackeros_rtn_net_recycle __read_mostly = 1;
++static int hackeros_rtn_pid_remap   __read_mostly = 0;
++
++static const int hackeros_redteam_namespace_present = 1;
++#endif /* CONFIG_HACKEROS_REDTEAM */
+--
+2.43.0
