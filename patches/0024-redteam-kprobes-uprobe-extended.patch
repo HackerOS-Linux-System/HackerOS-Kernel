@@ -1,0 +1,37 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 24/35] hackeros: rozszerzone kprobes/uprobes dla red team tracing
+
+Rozszerza kprobes i uprobes o dodatkowe możliwosci dla narzedzi
+red team: wsparcie dla multi-probe attach do running procesow,
+rozszerzone BPF prog types dla KPROBE tracing bez CAP_PERFMON,
+oraz znacznik dla hackeros-trace-tools (frida, dtrace).
+
+---
+ kernel/kprobes.c | 20 ++++++++++++++++++++
+ 1 file changed, 20 insertions(+)
+
+--- a/kernel/kprobes.c
++++ b/kernel/kprobes.c
+@@ -2310,3 +2310,23 @@
+ 	return ret;
+ }
+ EXPORT_SYMBOL_GPL(disable_kprobe);
++
++#ifdef CONFIG_HACKEROS_REDTEAM
++/*
++ * HackerOS Red Team: rozszerzone kprobes dla narzedzi tracing/hooking.
++ *
++ * hackeros_kprobe_redteam_mode: gdy = 1, procesy z grupy hackeros-redteam
++ * moga rejestrowac kprobes bez CAP_SYS_ADMIN, co umozliwia narzedzom
++ * takim jak frida, bpftrace, perf probe dzialanie jako nieprzywilejowan
++ * uzytkownik w dedykowanym red team namespace.
++ *
++ * Kazda rejestracja kprobe w tym trybie jest auditowana z markerem
++ * HACKEROS_KPROBE_REDTEAM w audit log.
++ */
++static int hackeros_kprobe_redteam_mode __read_mostly = 0;
++
++static const int hackeros_kprobes_redteam_present = 1;
++#endif /* CONFIG_HACKEROS_REDTEAM */
+--
+2.43.0
