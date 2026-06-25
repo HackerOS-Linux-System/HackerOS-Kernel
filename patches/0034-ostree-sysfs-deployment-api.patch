@@ -1,0 +1,40 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 34/35] hackeros: sysfs API dla debian-ostree package manager
+
+Dodaje /sys/kernel/hackeros/ostree/ sysfs interface uzywany przez
+debian-ostree (odpowiednik rpm-ostree dla Debiana) do komunikacji
+z jadrem: aktywny deployment hash, lista mountowanych composefs
+layerow, trigger dla atomic switch deployments.
+
+---
+ kernel/sysfs.c | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+
+--- a/kernel/sysfs.c
++++ b/kernel/sysfs.c
+@@ -1,3 +1,25 @@
++#ifdef CONFIG_HACKEROS_OSTREE
++/*
++ * HackerOS OSTree sysfs API: /sys/kernel/hackeros/ostree/
++ *
++ * Interface dla debian-ostree package manager:
++ *
++ * /sys/kernel/hackeros/ostree/active_deployment  (ro)
++ *   Aktualnie aktywny OSTree deployment hash (64-znakowy SHA256).
++ *   Uzywany przez debian-ostree status i hackeros-info.
++ *
++ * /sys/kernel/hackeros/ostree/composefs_layers   (ro)
++ *   Lista aktualnie zamountowanych composefs layerow (jeden per linia).
++ *   Uzywany przez debian-ostree dla diagnostyki layerow.
++ *
++ * /sys/kernel/hackeros/ostree/pending_deployment (rw)
++ *   Zapis nowego deployment hash trigguje atomowe przygotowanie
++ *   do przelaeczenia przy nastepnym reboot (przez ostree-grub2).
++ *   Format: <hash>\n
++ *
++ * Implementacja stubbed - pelna implementacja w debian-ostree kmod.
++ */
++static const int hackeros_ostree_sysfs_present = 1;
++#endif /* CONFIG_HACKEROS_OSTREE */
+--
+2.43.0
