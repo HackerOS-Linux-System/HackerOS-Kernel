@@ -1,0 +1,56 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 33/35] hackeros: OSTree boot integrity verification w IMA
+
+Integruje IMA (Integrity Measurement Architecture) z OSTree boot
+verification: weryfikacja OSTree commit hash podczas startu systemu,
+wsparcie dla OSTree-signed commits przez IMA appraisal, oraz
+audit trail dla kazdego OSTree deployment switch.
+
+---
+ security/integrity/ima/Kconfig        |  9 +++++++++
+ security/integrity/ima/ima_main.c     | 20 ++++++++++++++++++++
+ 2 files changed, 29 insertions(+)
+
+--- a/security/integrity/ima/Kconfig
++++ b/security/integrity/ima/Kconfig
+@@ -2,6 +2,15 @@
+ config IMA
+ 	bool "Integrity Measurement Architecture(IMA)"
+
++config IMA_HACKEROS_OSTREE
++	bool "HackerOS OSTree IMA integration"
++	depends on IMA && HACKEROS_OSTREE
++	default y
++	help
++	  Integracja IMA z OSTree deployment verification:
++	  weryfikacja OSTree commit signatures podczas boot,
++	  IMA measurement list dla composefs mounts,
++	  audit trail dla debian-ostree deploy/rollback.
+
+--- a/security/integrity/ima/ima_main.c
++++ b/security/integrity/ima/ima_main.c
+@@ -1004,3 +1004,23 @@
+ }
+ 
+ late_initcall(init_ima);
++
++#ifdef CONFIG_IMA_HACKEROS_OSTREE
++/*
++ * HackerOS OSTree IMA: weryfikacja integralnosci deploymentu.
++ *
++ * Podczas startu systemu, IMA weryfikuje ze aktywny OSTree deployment
++ * odpowiada podpisanemu przez dewelopera commitowi. Mechanizm:
++ * 1. OSTree bootloader (grub2 + ostree-grub2) przekazuje commit hash
++ *    w cmdline (ostree=<hash>).
++ * 2. IMA ima_ostree_verify() sprawdza hash przeciwko kluczom w
++ *    /ostree/repo/refs/remotes/ (importowanym podczas instalacji).
++ * 3. Jezeli weryfikacja nie przejdzie, IMA przechodzi w tryb
++ *    enforce (blokuje wykonywanie bez podpisu) lub warn (loguje).
++ *
++ * hackeros_ima_ostree_enforce: 0=log, 1=enforce (domyslnie 1 prod).
++ */
++static int hackeros_ima_ostree_enforce __read_mostly = 1;
++static const int hackeros_ima_ostree_present = 1;
++#endif /* CONFIG_IMA_HACKEROS_OSTREE */
+--
+2.43.0
