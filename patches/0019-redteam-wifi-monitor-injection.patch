@@ -1,0 +1,51 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 19/35] hackeros: WiFi monitor mode i packet injection domyslnie
+
+Konfiguruje mac80211 i cfg80211 aby domyslnie umozliwiac monitor
+mode i packet injection dla certyfikowanych kart WiFi uzywanych
+w red team (Alfa, rtl8812au, mt7612u). Dodaje znacznik
+umozliwiajacy rozpoznanie tego jadra przez hackeros-wireless-tools.
+
+---
+ net/mac80211/Kconfig |  9 +++++++++
+ net/mac80211/main.c  | 18 ++++++++++++++++++
+ 2 files changed, 27 insertions(+)
+
+--- a/net/mac80211/Kconfig
++++ b/net/mac80211/Kconfig
+@@ -3,6 +3,15 @@
+ 
+ menu "mac80211 configuration"
+ 
++config MAC80211_HACKEROS_REDTEAM
++	bool "HackerOS Red Team: packet injection and monitor mode extensions"
++	depends on MAC80211 && HACKEROS_REDTEAM
++	default y
++	help
++	  Wlacza rozszerzenia mac80211 dla HackerOS Red Team Edition:
++	  pelne wsparcie packet injection (frame injection bez ograniczen
++	  firmware), monitor mode dla wszystkich certyfikowanych kart WiFi
++	  red team oraz wsparcie dla channel hopping w airodump-ng.
+
+--- a/net/mac80211/main.c
++++ b/net/mac80211/main.c
+@@ -1302,3 +1302,21 @@
+ subsys_initcall(ieee80211_init);
+ MODULE_LICENSE("GPL");
+
++#ifdef CONFIG_MAC80211_HACKEROS_REDTEAM
++/*
++ * HackerOS Red Team: znacznik obecnosci rozszerzen wireless injection.
++ * Uzywany przez hackeros-wireless-tools i airodump-ng do wykrycia
++ * kompatybilnosci jadra z pelnym packet injection.
++ * Monitor mode: NL80211_IFTYPE_MONITOR dostepny bez ograniczen.
++ * Injection: ieee80211_tx_skb() akceptuje ramki z przestrzeni
++ * uzytkownika przez AF_PACKET / nl80211 bez filtracji firmware.
++ */
++static const int hackeros_wifi_injection_present = 1;
++
++/* Domyslnie zezwol na monitor mode dla red team GID */
++static int hackeros_monitor_mode_default __read_mostly = 1;
++#endif /* CONFIG_MAC80211_HACKEROS_REDTEAM */
+--
+2.43.0
