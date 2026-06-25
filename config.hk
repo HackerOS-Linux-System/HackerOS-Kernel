@@ -6,26 +6,33 @@
 
 [metadata]
 -> name        => HackerOS Kernel
--> codename    => Wolfsbane
+-> codename    => Shadowhawk
 -> branch      => cybersecurity
 -> maintainer  => HackerOS Linux System <hackeros068@gmail.com>
 -> homepage    => https://hackeros-linux-system.github.io/HackerOS-Website/
 -> license     => MPL-2.0
--> description => Zmodyfikowane jadro Linux dla HackerOS Cybersecurity Edition
+-> description => Zmodyfikowane jadro Linux dla HackerOS Red Team Edition (Cybersecurity)
+-> edition     => Red Team
 
 ! ---------------------------------------------------------------------------
 ! Zrodlo jadra (vanilla Linux). Build.lua sciaga ten tarball i nadpisuje go
-! patchami z patches/. Domyslnie: 7.1 - skrypt sam wykrywa nowsze wersje
-! z kernel.org, jesli "auto_latest" jest true.
+! patchami z patches/. Wersja jadra konfigurowana tutaj - zmien base_version
+! aby przestawic na nowsza wersje. Najnowsza stabilna: 7.1
+! auto_latest=false: wersja KONTROLOWANA przez ten plik, nie auto-detekcja.
 ! ---------------------------------------------------------------------------
 [source]
 -> base_version    => 7.1
--> auto_latest     => true
+-> auto_latest     => false
 -> min_version     => 7.1
 -> mirror          => https://cdn.kernel.org/pub/linux/kernel/v${source.major}.x/
 -> major           => 7
 -> tarball_pattern => linux-${source.base_version}.tar.xz
 -> sha_check       => true
+
+! Aby zmienic wersje jadra, ustaw base_version powyzej i (opcjonalnie) major.
+! Przykladowe przyszle wersje:
+!   -> base_version => 7.2
+!   -> base_version => 7.3
 
 [target]
 -> arch         => x86_64
@@ -39,15 +46,15 @@
 ! Pakiet .deb - nazwy, sekcje, zaleznosci
 ! ---------------------------------------------------------------------------
 [package]
--> name             => hackeros-kernel-cybersecurity
+-> name             => hackeros-kernel-redteam
 -> section          => kernel
 -> priority         => optional
 -> architecture     => amd64
 -> conflicts        => ["linux-image-amd64"]
 -> replaces         => ["linux-image-amd64"]
--> provides         => ["linux-image", "linux-image-amd64"]
+-> provides         => ["linux-image", "linux-image-amd64", "hackeros-kernel-cybersecurity"]
 -> depends          => ["initramfs-tools | dracut", "kmod", "grub-pc | grub-efi-amd64", "openssl"]
--> recommends       => ["xen-hypervisor-4.20-amd64", "hackeros-cybersecurity-tools"]
+-> recommends       => ["xen-hypervisor-4.20-amd64", "hackeros-redteam-tools", "hackeros-cybersecurity-tools"]
 -> set_default      => true
 -> remove_old_kernel => true
 -> postinst_grub_update => true
@@ -56,13 +63,15 @@
 ! Wersjonowanie pakietu .deb
 ! ---------------------------------------------------------------------------
 [versioning]
--> kernel_suffix     => hackeros-cybersec
--> abi_tag           => hk1
+-> kernel_suffix     => hackeros-redteam
+-> abi_tag           => hk2
 -> deb_version       => ${source.base_version}-${versioning.abi_tag}
 -> uname_suffix      => -${versioning.kernel_suffix}
 
 ! ---------------------------------------------------------------------------
 ! Konfiguracja kompilacji (.config jadra)
+! PELNY BUILD ze wszystkimi sterownikami - nie minimalistyczny.
+! Wlacza: WiFi injection drivers, USB gadget, Bluetooth HCI, full netfilter.
 ! ---------------------------------------------------------------------------
 [build]
 -> jobs            => auto
@@ -75,9 +84,11 @@
 -> strip_modules   => true
 -> build_dir       => ./build
 -> log_dir         => ./logs
+-> full_drivers    => true
+-> no_minimal      => true
 
 ! ---------------------------------------------------------------------------
-! Patche nakladane w kolejnosci (fork patchset HackerOS Cybersecurity)
+! Patche nakladane w kolejnosci (35 patchy: cybersec + red team + ostree)
 ! ---------------------------------------------------------------------------
 [patches]
 -> dir          => ./patches
@@ -97,13 +108,31 @@
   "0013-module-sig-enforce-tamper-evident.patch",
   "0014-xen-domu-network-isolation-default.patch",
   "0015-ebpf-prog-load-audit-trail.patch",
-  "0016-kernel-lockdown-confidentiality-strict.patch"
+  "0016-kernel-lockdown-confidentiality-strict.patch",
+  "0017-redteam-branding-redteam-edition.patch",
+  "0018-redteam-raw-socket-cap-bypass.patch",
+  "0019-redteam-wifi-monitor-injection.patch",
+  "0020-redteam-packet-mmap-ring.patch",
+  "0021-redteam-netfilter-redteam-hooks.patch",
+  "0022-redteam-usb-gadget-hid-emulation.patch",
+  "0023-redteam-memory-forensics-ptrace.patch",
+  "0024-redteam-kprobes-uprobe-extended.patch",
+  "0025-redteam-tun-tap-vpn-red-team.patch",
+  "0026-redteam-crypto-user-api-extended.patch",
+  "0027-redteam-namespace-isolation-redteam.patch",
+  "0028-redteam-bluetooth-monitor-hci.patch",
+  "0029-redteam-nfqueue-mitm-extensions.patch",
+  "0030-redteam-perf-events-unprivileged.patch",
+  "0031-ostree-dm-verity-composefs-integration.patch",
+  "0032-ostree-overlayfs-whiteout-ostree.patch",
+  "0033-ostree-boot-integrity-verification.patch",
+  "0034-ostree-sysfs-deployment-api.patch",
+  "0035-redteam-full-driver-build-marker.patch"
   ]
 -> fail_on_reject => true
 
 ! ---------------------------------------------------------------------------
-! Hardening / cybersecurity - flagi wysokiego poziomu, mapowane na CONFIG_*
-! przez build.lua na fragmenty .config w config/fragments/
+! Hardening / cybersecurity - flagi wysokiego poziomu
 ! ---------------------------------------------------------------------------
 [hardening]
 -> kaslr                  => true
@@ -127,13 +156,54 @@
 -> integrity_appraisal      => true
 
 ! ---------------------------------------------------------------------------
-! Runtime hardening - ustawienia ktore NIE sa CONFIG_* w .config, a parametrami
-! startowymi jadra (GRUB_CMDLINE) lub sysctl ustawianymi przez postinst.
-! Sa stabilne miedzy wersjami jadra (w odroznieniu od patchy zaczepionych
-! o konkretne linie kodu), bo to oficjalne, dokumentowane interfejsy ABI.
+! Red Team rozszerzenia - konfiguracja ofensywnych mozliwosci
+! ---------------------------------------------------------------------------
+[redteam]
+-> enabled                  => true
+-> raw_socket_mode           => 0
+-> wifi_monitor_mode         => true
+-> wifi_packet_injection     => true
+-> bluetooth_monitor         => true
+-> bluetooth_raw_hci         => false
+-> ble_adv_sniff             => true
+-> usb_hid_emulation         => true
+-> usb_hid_inject_delay_ms   => 10
+-> usb_hid_layout            => 0
+-> ptrace_forensics           => true
+-> ptrace_redteam_scope       => 0
+-> kprobe_redteam_mode        => 0
+-> tun_redteam_queues          => 64
+-> tun_vxlan_offload           => true
+-> crypto_extended_algos       => true
+-> namespace_net_recycle       => true
+-> perf_redteam_paranoid       => -1
+-> nfqueue_redteam_base        => 1024
+-> nfqueue_redteam_count       => 1024
+-> nfqueue_max_payload          => 65535
+-> nfqueue_bypass_ct            => false
+-> packet_ring_frames           => 4096
+
+! ---------------------------------------------------------------------------
+! OSTree / immutable OS integracja (debian-ostree)
+! ---------------------------------------------------------------------------
+[ostree]
+-> enabled                 => true
+-> dm_verity_ostree         => true
+-> composefs_support        => true
+-> overlayfs_extensions     => true
+-> ima_verification         => true
+-> ima_enforce              => true
+-> sysfs_api                => true
+-> deploy_path              => /ostree/deploy
+-> repo_path                => /ostree/repo
+-> grub_integration         => true
+-> atomic_updates           => true
+-> rollback_support         => true
+
+! ---------------------------------------------------------------------------
+! Runtime hardening - boot params i sysctl
 ! ---------------------------------------------------------------------------
 [runtime_hardening]
-! --- Parametry wiersza polecen jadra (dopisywane do GRUB_CMDLINE_LINUX_DEFAULT) ---
 -> boot_params
 --> randomize_kstack_offset => on
 --> "page_alloc.shuffle"      => 1
@@ -145,7 +215,6 @@
 --> mce                          => 0
 --> vsyscall                     => none
 
-! --- Sysctl wymuszane przez postinst do /etc/sysctl.d/99-hackeros-cybersec.conf ---
 -> sysctl
 --> "kernel.kptr_restrict"             => 2
 --> "kernel.dmesg_restrict"             => 1
@@ -165,7 +234,7 @@
 --> "fs.suid_dumpable"                                => 0
 
 ! ---------------------------------------------------------------------------
-! Wsparcie dla Xen (hypervisor juz obecny w HackerOS Cybersecurity Edition)
+! Wsparcie dla Xen
 ! ---------------------------------------------------------------------------
 [xen]
 -> enabled       => true
@@ -178,7 +247,7 @@
 -> netback        => true
 
 ! ---------------------------------------------------------------------------
-! Moduly / podsystemy istotne dla cybersecurity (pentesting, forensics, sniffing)
+! Moduly / podsystemy cybersecurity (rozszerzone o red team)
 ! ---------------------------------------------------------------------------
 [cybersecurity_subsystems]
 -> netfilter_full        => true
@@ -196,6 +265,12 @@
 -> dm_verity                => true
 -> tpm_support              => true
 -> ima_evm                  => true
+-> usb_gadget_hid           => true
+-> tun_tap_advanced         => true
+-> nfqueue_mitm             => true
+-> raw_socket_extended      => true
+-> perf_events_full         => true
+-> namespace_full           => true
 
 [paths]
 -> src_dir      => ./src
@@ -206,33 +281,25 @@
 -> output_headers_deb => ${build.output}/${headers_package.name}_${versioning.deb_version}_${package.architecture}.deb
 
 ! ---------------------------------------------------------------------------
-! Podpisywanie modulow i pakietu. Jesli hardening.module_sig = true,
-! build.lua wygeneruje wlasna pare kluczy X.509 (RSA) uzywana do podpisania
-! WSZYSTKICH modulow w drzewie (wbudowanych i przyszlych out-of-tree/DKMS),
-! zamiast jednorazowego klucza generowanego domyslnie przez sam kernel.
-! Klucz prywatny jest zachowywany w keys_dir, aby DKMS mogl podpisywac
-! nowo budowane moduly tym samym kluczem po instalacji.
+! Podpisywanie modulow i pakietu
 ! ---------------------------------------------------------------------------
 [signing]
 -> sign_modules     => true
 -> keys_dir          => ./build/keys
--> key_cn             => HackerOS Kernel Module Signing
+-> key_cn             => HackerOS Red Team Kernel Module Signing
 -> key_days_valid      => 3650
 -> install_key_for_dkms => true
 -> sign_package      => false
 -> gpg_key_id         => ""
 
 ! ---------------------------------------------------------------------------
-! Osobny pakiet .deb z naglowkami jadra (linux-headers-*), niezbedny do
-! budowania modulow out-of-tree przez DKMS - kluczowe dla edycji cybersecurity,
-! gdzie uzytkownicy doinstalowuja sterowniki WiFi do wstrzykiwania pakietow
-! (np. rtl88xxau, rtl8812au) ktore nie sa w drzewie glownym jadra.
+! Osobny pakiet .deb z naglowkami jadra
 ! ---------------------------------------------------------------------------
 [headers_package]
 -> enabled       => true
--> name           => hackeros-kernel-headers-cybersecurity
+-> name           => hackeros-kernel-headers-redteam
 -> depends         => ["gcc", "make", "binutils", "libssl-dev", "bc", "flex", "bison", "libelf-dev"]
--> recommends      => ["dkms"]
+-> recommends      => ["dkms", "hackeros-redteam-dkms-drivers"]
 -> install_dkms_conf => true
 
 ! ===========================================================================
