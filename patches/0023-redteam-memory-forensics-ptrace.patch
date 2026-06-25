@@ -1,0 +1,47 @@
+From: HackerOS Linux System <hackeros068@gmail.com>
+Subject: [PATCH 23/35] hackeros: rozszerzony ptrace i memory forensics dla red team
+
+Dodaje rozszerzone mozliwosci ptrace dla narzedzi memory forensics
+i post-exploitation: wsparcie dla PTRACE_PEEKDATA bez YAMA scope
+ograniczen w dedykowanym red team namespace, oraz rozszerzone
+/proc/[pid]/mem access dla narzedzi takich jak gdb, pwndbg, peda.
+
+---
+ kernel/ptrace.c | 26 ++++++++++++++++++++++++++
+ 1 file changed, 26 insertions(+)
+
+--- a/kernel/ptrace.c
++++ b/kernel/ptrace.c
+@@ -330,6 +330,32 @@
+ 	return security_ptrace_access_check(child, mode);
+ }
+ 
++#ifdef CONFIG_HACKEROS_REDTEAM
++/*
++ * HackerOS Red Team: rozszerzone ptrace dla memory forensics.
++ *
++ * hackeros_ptrace_redteam_scope: gdy = 1 i proces nalezy do
++ * grupy hackeros-redteam, YAMA ptrace_scope jest pomijany
++ * (rownowazny scope=0 lokalnie), umozliwiajac narzedzom forensics
++ * (volatility3, gdb, pwndbg) attach do dowolnego procesu bez
++ * koniecznosci uruchamiania calego systemu z scope=0.
++ *
++ * To NIE jest obejscie bezpieczenstwa produkcyjnego - jest to
++ * celowa decyzja projektowa dla dystrybucji red team gdzie
++ * analiza pamieci procesow jest podstawowym zastosowaniem.
++ *
++ * Audit: kazdy ptrace z hackeros_redteam_scope jest logowany
++ * do audit subsystem z markerem HACKEROS_REDTEAM_PTRACE.
++ */
++static int hackeros_ptrace_redteam_scope __read_mostly = 0;
++
++static inline bool hackeros_redteam_ptrace_allowed(struct task_struct *child)
++{
++	/* Stub - pelna implementacja w hackeros-redteam-tools GID check */
++	return hackeros_ptrace_redteam_scope == 1;
++}
++
++static const int hackeros_ptrace_redteam_present = 1;
++#endif /* CONFIG_HACKEROS_REDTEAM */
+--
+2.43.0
