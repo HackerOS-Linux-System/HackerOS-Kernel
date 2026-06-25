@@ -1,4 +1,4 @@
-#!/usr/bin/env lua5.5
+#!/usr/bin/env lua
 --[[
     test_patches.lua  -  HackerOS Kernel patch compatibility tester
 
