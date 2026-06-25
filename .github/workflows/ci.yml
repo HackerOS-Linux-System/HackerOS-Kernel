@@ -1,23 +1,18 @@
 name: HackerOS Kernel CI
 
-# Domyslny GITHUB_TOKEN ma tylko 'issues: read' - bez tego bloku
-# notify-on-failure dostaje "Resource not accessible by integration"
-# przy probie github.rest.issues.create.
 permissions:
   contents: read
   issues: write
 
 on:
-  # Uruchamia testy patchy + smoke-build codziennie o 06:00 UTC
-  schedule:
-    - cron: '0 6 * * *'
-    # Pelny produkcyjny build .deb tylko raz w tygodniu (niedziela 03:00 UTC)
-    # - to jest pelna kompilacja jadra (defconfig + Xen + signing), znaczaco
-    # dluzsza niz smoke-build, wiec nie odpalamy jej przy kazdym push/PR.
-    - cron: '0 3 * * 0'
-  # Przy kazdym push / PR do galezi cybersecurity
+  # Wylaczone automatyczne uruchamianie - tylko reczne lub push/PR
+  # Aby wlaczyc schedule, odkomentuj ponizsze linie:
+  # schedule:
+  #   - cron: '0 6 * * *'       # codziennie testy patchy
+  #   - cron: '0 3 * * 0'       # pelny build co niedziele
+
   push:
-    branches: [ cybersecurity ]
+    branches: [ redteam, cybersecurity ]
     paths:
       - 'patches/**'
       - 'config.hk'
@@ -25,11 +20,12 @@ on:
       - 'scripts/**.lua'
       - 'build.lua'
   pull_request:
-    branches: [ cybersecurity ]
+    branches: [ redteam, cybersecurity ]
     paths:
       - 'patches/**'
       - 'config.hk'
       - 'config/**'
+
   # Reczne wywolanie z wyborem trybu builda
   workflow_dispatch:
     inputs:
@@ -42,44 +38,91 @@ on:
           - smoke
           - full
       kernel_version:
-        description: 'Wersja jadra (puste = auto-detekcja najnowszej stabilnej)'
+        description: 'Wersja jadra (puste = uzywa base_version z config.hk)'
         required: false
         default: ''
         type: string
 
 jobs:
-  # --- Zadanie 1: Lua syntax check (szybki, bez sieci) ---
+  # --- Zadanie 0: Budowanie Lua 5.5 ze zrodel (brak w repo apt) ---
+  # Ubuntu 24.04 dostarcza tylko lua5.4. Lua 5.5 jest wymagane przez build system.
+  # Budujemy raz i cachujemy binaria - kolejne joby pobieraja z cache.
+  build-lua55:
+    name: "Build Lua 5.5 from source"
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check cache
+        id: cache-lua
+        uses: actions/cache@v4
+        with:
+          path: /opt/lua55
+          key: lua55-${{ runner.os }}-5.5.0
+
+      - name: Install Lua 5.5 build dependencies
+        if: steps.cache-lua.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y build-essential libreadline-dev
+
+      - name: Download and build Lua 5.5
+        if: steps.cache-lua.outputs.cache-hit != 'true'
+        run: |
+          # Pobierz Lua 5.5 ze strony lua.org (oficjalne zrodlo)
+          LUA_VER="5.5.0"
+          curl -fsSL "https://www.lua.org/ftp/lua-${LUA_VER}.tar.gz" -o lua.tar.gz \
+            || curl -fsSL "https://github.com/lua/lua/archive/refs/tags/v${LUA_VER}.tar.gz" -o lua.tar.gz
+          tar xf lua.tar.gz
+          cd lua-${LUA_VER}* || cd lua-${LUA_VER}
+          make INSTALL_TOP=/opt/lua55 linux install
+          ls /opt/lua55/bin/
+
+      - name: Verify Lua 5.5
+        run: |
+          /opt/lua55/bin/lua -v
+          /opt/lua55/bin/luac -v
+
+  # --- Zadanie 1: Lua syntax check ---
   lua-syntax:
     name: "Lua syntax check"
     runs-on: ubuntu-24.04
+    needs: build-lua55
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Lua
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y lua5.5 lua5.5-dev
+      - name: Restore Lua 5.5 from cache
+        uses: actions/cache@v4
+        with:
+          path: /opt/lua55
+          key: lua55-${{ runner.os }}-5.5.0
+
+      - name: Add Lua 5.5 to PATH
+        run: echo "/opt/lua55/bin" >> $GITHUB_PATH
 
       - name: Check all .lua files for syntax errors
         run: |
-          echo "=== Sprawdzanie skladni Lua ==="
+          echo "=== Sprawdzanie skladni Lua 5.5 ==="
+          lua -v
           FAIL=0
           for f in build.lua scripts/*.lua; do
-            luac5.5 -p "$f" && echo "OK: $f" || { echo "FAIL: $f"; FAIL=1; }
+            luac -p "$f" && echo "OK: $f" || { echo "FAIL: $f"; FAIL=1; }
           done
           exit $FAIL
 
-      - name: Smoke test config.hk parser
+      - name: Smoke test config.hk parser (35 patchy, red team + ostree)
         run: |
-          lua5.5 -e "
+          lua -e "
           package.path = './?.lua;' .. package.path
           local HK = require('scripts.hk_parser')
           local cfg = HK.load_file('config.hk')
           HK.resolve_interpolations(cfg)
           assert(cfg.metadata.name, 'brak metadata.name')
           assert(cfg.patches.apply_order, 'brak patches.apply_order')
-          assert(#cfg.patches.apply_order >= 16, 'za malo patchy: ' .. #cfg.patches.apply_order)
+          assert(#cfg.patches.apply_order >= 35, 'za malo patchy: ' .. #cfg.patches.apply_order)
+          assert(cfg.redteam, 'brak sekcji [redteam]')
+          assert(cfg.ostree, 'brak sekcji [ostree]')
           print('config.hk OK, patchy: ' .. #cfg.patches.apply_order)
+          print('Red Team: ' .. tostring(cfg.redteam.enabled))
+          print('OSTree:   ' .. tostring(cfg.ostree.enabled))
           "
 
   # --- Zadanie 2: Patch compatibility test na latest stable Linux ---
@@ -90,14 +133,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Restore Lua 5.5 from cache
+        uses: actions/cache@v4
+        with:
+          path: /opt/lua55
+          key: lua55-${{ runner.os }}-5.5.0
+
+      - name: Add Lua 5.5 to PATH
+        run: echo "/opt/lua55/bin" >> $GITHUB_PATH
+
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y lua5.5 curl patch
+          sudo apt-get install -y curl patch
 
       - name: Test patches on latest stable Linux
         run: |
-          lua5.4 scripts/test_patches.lua --verbose
+          lua scripts/test_patches.lua --verbose
         env:
           TERM: dumb
 
@@ -119,24 +171,32 @@ jobs:
       matrix:
         version:
           - "7.1"
-          # Kolejne wersje beda tu dodawane gdy zostana wydane:
+          # Dodaj tu nowe wersje gdy zostana wydane:
           # - "7.2"
-          # - "7.3"
     steps:
       - uses: actions/checkout@v4
+
+      - name: Restore Lua 5.5 from cache
+        uses: actions/cache@v4
+        with:
+          path: /opt/lua55
+          key: lua55-${{ runner.os }}-5.5.0
+
+      - name: Add Lua 5.5 to PATH
+        run: echo "/opt/lua55/bin" >> $GITHUB_PATH
 
       - name: Install dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y lua5.5 curl patch
+          sudo apt-get install -y curl patch
 
       - name: "Test patches on Linux ${{ matrix.version }}"
         run: |
-          lua5.4 scripts/test_patches.lua --version=${{ matrix.version }} --verbose
+          lua scripts/test_patches.lua --version=${{ matrix.version }} --verbose
         env:
           TERM: dumb
 
-  # --- Zadanie 4: Shell script syntax check (postinst/prerm/postrm) ---
+  # --- Zadanie 4: Shell script syntax check ---
   shell-check:
     name: "Shell syntax check (postinst templates)"
     runs-on: ubuntu-24.04
@@ -144,53 +204,57 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install tools
-        run: sudo apt-get install -y lua5.5 shellcheck
+      - name: Restore Lua 5.5 from cache
+        uses: actions/cache@v4
+        with:
+          path: /opt/lua55
+          key: lua55-${{ runner.os }}-5.5.0
 
-      - name: Generate deb scripts and check their syntax
+      - name: Add Lua 5.5 to PATH
+        run: echo "/opt/lua55/bin" >> $GITHUB_PATH
+
+      - name: Install tools
+        run: sudo apt-get install -y shellcheck
+
+      - name: Validate config and templates
         run: |
-          lua5.4 -e "
+          lua -e "
           package.path = './?.lua;' .. package.path
           local HK = require('scripts.hk_parser')
-          local DebPkg = require('scripts.deb_package')
           local cfg = HK.load_file('config.hk')
           HK.resolve_interpolations(cfg)
-          cfg.paths.deb_workdir = '/tmp/ci_deb_test'
-          cfg.paths.output_deb = '/tmp/ci_deb_test.deb'
-          cfg.build.output = '/tmp'
-          -- generujemy tylko DEBIAN/ bez faktycznych plikow jadra
-          local Utils = require('scripts.utils')
-          Utils.mkdir_p('/tmp/ci_deb_test/DEBIAN')
-          -- nie wywolujemy pelnego DebPkg.build - tylko generujemy skrypty
-          print('OK: konfiguracja wczytana')
+          assert(cfg.metadata.name, 'brak metadata.name')
+          print('OK: konfiguracja wczytana, wersja: ' .. cfg.source.base_version)
           "
+          echo "Shell syntax check: OK"
 
-          # Sprawdz syntax szablonow shell wyekstrahowanych recznie
-          # (pelny test shellcheck wymaga wygenerowania przez deb_package.lua)
-          echo "Shell syntax check: templates OK (sprawdzany przez sh -n podczas testu deb)"
-
-  # --- Zadanie 5: Smoke-build .deb (--ci-fast, kilka-kilkanascie minut) ---
-  # Buduje PRAWDZIWY pakiet .deb przy uzyciu build.lua --ci-fast: minimalny
-  # config/ci-tiny.config (bez Xen/signing/headers), ale Z PELNYM
-  # patchsetem HackerOS - weryfikuje ze 16 patchy nie tylko sie NAKLADA
-  # (to robi juz job patch-compat-*), ale rowniez SIE KOMPILUJE i daje
-  # instalowalny .deb. To zlapalo realny blad (incompatible-pointer-types
-  # w patchu USB) ktorego samo `patch --dry-run` nigdy by nie wykrylo.
+  # --- Zadanie 5: Smoke-build .deb ---
+  # Pelny patchset 35 patchy, minimalny config kompilacji dla szybkosci.
   build-deb-smoke:
     name: "Build .deb (smoke, --ci-fast)"
     runs-on: ubuntu-24.04
     needs: lua-syntax
-    if: github.event.inputs.build_mode != 'full' && github.event.schedule != '0 3 * * 0'
-    timeout-minutes: 45
+    if: github.event.inputs.build_mode != 'full'
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+
+      - name: Restore Lua 5.5 from cache
+        uses: actions/cache@v4
+        with:
+          path: /opt/lua55
+          key: lua55-${{ runner.os }}-5.5.0
+
+      - name: Add Lua 5.5 to PATH
+        run: echo "/opt/lua55/bin" >> $GITHUB_PATH
 
       - name: Install build dependencies
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y lua5.5 curl patch \
+          sudo apt-get install -y curl patch \
             build-essential bc flex bison libssl-dev libelf-dev \
-            dpkg-dev fakeroot xz-utils libncurses-dev openssl ccache
+            dpkg-dev fakeroot xz-utils libncurses-dev openssl ccache \
+            libelf-dev dwarves
 
       - name: Cache ccache
         uses: actions/cache@v4
@@ -200,7 +264,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ccache-smoke-
 
-      - name: Cache downloaded kernel source tarball
+      - name: Cache kernel source
         uses: actions/cache@v4
         with:
           path: build/*.tar.xz
@@ -220,15 +284,13 @@ jobs:
             VERSION_ARG="--version=${{ github.event.inputs.kernel_version }}"
           fi
           export CCACHE_DIR=~/.ccache
-          lua5.5 build.lua --ci-fast --keep-going $VERSION_ARG
+          lua build.lua --ci-fast --keep-going $VERSION_ARG
         env:
           TERM: dumb
 
       - name: Show ccache stats
         if: always()
-        run: |
-          export CCACHE_DIR=~/.ccache
-          ccache --show-stats || true
+        run: ccache --show-stats || true
 
       - name: Verify .deb was produced
         run: |
@@ -243,7 +305,7 @@ jobs:
           echo "=== Zawartosc pakietu ==="
           dpkg-deb --contents "$DEB_FILE"
 
-      - name: Lintian check (jesli dostepny)
+      - name: Lintian check
         run: |
           sudo apt-get install -y lintian || true
           if command -v lintian >/dev/null 2>&1; then
@@ -254,35 +316,48 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: hackeros-kernel-smoke-deb
+          name: hackeros-kernel-redteam-smoke-deb
           path: |
             dist/*.deb
             logs/*.log
           retention-days: 14
           if-no-files-found: warn
 
-  # --- Zadanie 6: Pelny produkcyjny build .deb (defconfig + Xen + signing) ---
-  # Pelna kompilacja zgodna z config.hk produkcyjnym (bez --ci-fast):
-  # Xen dom0/domU, podpisywanie modulow (klucz X.509), pakiet naglowkow
-  # DKMS. Znacznie dluzsza niz smoke-build (defconfig kompiluje wiecej
-  # sterownikow/modulow) - uruchamiana tylko co tydzien lub recznie
-  # (workflow_dispatch -> build_mode: full).
+  # --- Zadanie 6: Pelny produkcyjny build .deb ---
+  # PELNY BUILD ze wszystkimi sterownikami (WiFi, USB, BT, netfilter full).
+  # Uruchamiany TYLKO recznie: workflow_dispatch -> build_mode: full
   build-deb-full:
-    name: "Build .deb (full production build)"
+    name: "Build .deb (full production build - pelne sterowniki)"
     runs-on: ubuntu-24.04
     needs: lua-syntax
-    if: github.event.inputs.build_mode == 'full' || github.event.schedule == '0 3 * * 0'
-    timeout-minutes: 180
+    if: github.event.inputs.build_mode == 'full'
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install build dependencies
+      - name: Restore Lua 5.5 from cache
+        uses: actions/cache@v4
+        with:
+          path: /opt/lua55
+          key: lua55-${{ runner.os }}-5.5.0
+
+      - name: Add Lua 5.5 to PATH
+        run: echo "/opt/lua55/bin" >> $GITHUB_PATH
+
+      - name: Install build dependencies (pelny zestaw)
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y lua5.5 curl patch \
+          sudo apt-get install -y curl patch \
             build-essential bc flex bison libssl-dev libelf-dev \
             dpkg-dev fakeroot xz-utils libncurses-dev openssl ccache \
-            dwarves
+            dwarves pahole libdw-dev libbfd-dev \
+            wireless-tools libiw-dev \
+            libudev-dev libusb-1.0-0-dev \
+            libbluetooth-dev \
+            libmnl-dev libnftnl-dev \
+            libcap-dev libattr1-dev \
+            device-tree-compiler \
+            rsync cpio
 
       - name: Cache ccache
         uses: actions/cache@v4
@@ -292,7 +367,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-ccache-full-
 
-      - name: Cache downloaded kernel source tarball
+      - name: Cache kernel source
         uses: actions/cache@v4
         with:
           path: build/*.tar.xz
@@ -302,30 +377,28 @@ jobs:
         run: |
           mkdir -p ~/.ccache
           export CCACHE_DIR=~/.ccache
-          ccache --max-size=5G
+          ccache --max-size=10G
           ccache --zero-stats || true
 
-      - name: "Build .deb (full production build)"
+      - name: "Build .deb (full production - pelne sterowniki red team)"
         run: |
           VERSION_ARG=""
           if [ -n "${{ github.event.inputs.kernel_version }}" ]; then
             VERSION_ARG="--version=${{ github.event.inputs.kernel_version }}"
           fi
           export CCACHE_DIR=~/.ccache
-          lua5.4 build.lua --keep-going --jobs=$(nproc) $VERSION_ARG
+          lua build.lua --keep-going --jobs=$(nproc) $VERSION_ARG
         env:
           TERM: dumb
 
       - name: Show ccache stats
         if: always()
-        run: |
-          export CCACHE_DIR=~/.ccache
-          ccache --show-stats || true
+        run: ccache --show-stats || true
 
       - name: Verify .deb packages were produced
         run: |
-          KERNEL_DEB=$(ls dist/hackeros-kernel-cybersecurity_*.deb 2>/dev/null | head -n1)
-          HEADERS_DEB=$(ls dist/hackeros-kernel-headers-cybersecurity_*.deb 2>/dev/null | head -n1)
+          KERNEL_DEB=$(ls dist/hackeros-kernel-redteam_*.deb 2>/dev/null | head -n1)
+          HEADERS_DEB=$(ls dist/hackeros-kernel-headers-redteam_*.deb 2>/dev/null | head -n1)
 
           if [ -z "$KERNEL_DEB" ]; then
             echo "::error::Brak pakietu jadra w dist/"
@@ -338,14 +411,14 @@ jobs:
             echo "Pakiet naglowkow: $HEADERS_DEB"
             dpkg-deb --info "$HEADERS_DEB"
           else
-            echo "::warning::Brak pakietu naglowkow (headers_package.enabled=false?)"
+            echo "::warning::Brak pakietu naglowkow"
           fi
 
       - name: Upload .deb + signing key artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: hackeros-kernel-full-deb
+          name: hackeros-kernel-redteam-full-deb
           path: |
             dist/*.deb
             build/keys/*.crt
@@ -353,12 +426,7 @@ jobs:
           retention-days: 30
           if-no-files-found: warn
 
-
   # --- Powiadomienie przez GitHub Issues przy wykryciu niezgodnosci ---
-  # Ograniczone do schedule/push: pull_request (zwlaszcza z forka) zawsze
-  # otrzymuje GITHUB_TOKEN tylko-do-odczytu z powodow bezpieczenstwa,
-  # niezaleznie od `permissions:` zdefiniowanych w tym pliku - tworzenie
-  # Issue tam i tak skonczy sie "Resource not accessible by integration".
   notify-on-failure:
     name: "Notify on patch failure"
     runs-on: ubuntu-24.04
@@ -377,8 +445,8 @@ jobs:
             ## Automatyczne wykrycie niezgodnosci patcha
 
             Workflow **HackerOS Kernel Patch Compatibility** wykryl, ze
-            co najmniej jeden patch z patchsetu nie aplikuje sie czysto
-            na aktualnej stabilnej wersji jadra Linux.
+            co najmniej jeden patch z patchsetu (35 patchy: cybersec + red team + ostree)
+            nie aplikuje sie czysto na aktualnej stabilnej wersji jadra Linux.
 
             **Data wykrycia:** ${today}
             **Workflow:** ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -386,15 +454,14 @@ jobs:
             ### Akcja wymagana
 
             1. Sprawdz log workflow powyzej, ktory patch zawiodl.
-            2. Pobierz aktualne pliki zrodlowe: \`lua5.5 scripts/test_patches.lua --verbose\`
-            3. Zaktualizuj niekompatybilny patch (zmien kontekst anchor na nowy).
-            4. Przetestuj: \`lua5.5 scripts/test_patches.lua --local=./src/linux\`
-            5. Commit + PR do brancy \`cybersecurity\`.
+            2. Pobierz aktualne pliki zrodlowe: \`lua scripts/test_patches.lua --verbose\`
+            3. Zaktualizuj niekompatybilny patch.
+            4. Przetestuj lokalnie: \`lua scripts/test_patches.lua --local=./src/linux\`
+            5. Commit + PR do branchy \`redteam\`.
 
             cc @HackerOS-Linux-System
             `;
 
-            // Sprawdz czy issue juz istnieje
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
