@@ -2,47 +2,29 @@ From: HackerOS Linux System <hackeros068@gmail.com>
 Subject: [PATCH 31/35] hackeros: OSTree/composefs dm-verity integration dla immutable OS
 
 Dodaje wsparcie dla OSTree-based immutable filesystem stack:
-composefs (overlay filesystem dla OSTree deployments), rozszerzone
-dm-verity z OSTree-compatible hash tree format, oraz fsverity API
-extensions dla weryfikacji integralnosci OSTree commits.
+dm-verity z OSTree-compatible hash tree format (inline w composefs
+superblock), umozliwiajac debian-ostree weryfikacje integralnosci
+kazdego deployment bez osobnego urzadzenia hash.
 
 ---
- fs/Kconfig                      |  9 +++++++++
- drivers/md/dm-verity-target.c   | 20 ++++++++++++++++++++
- 2 files changed, 29 insertions(+)
-
---- a/fs/Kconfig
-+++ b/fs/Kconfig
-@@ -321,6 +321,15 @@
- 	  fsverity is a filesystem feature for transparent integrity
- 	  protection of read-only files.
-
-+config HACKEROS_OSTREE
-+	bool "HackerOS OSTree immutable OS support (composefs/dm-verity)"
-+	depends on HACKEROS_KERNEL && DM_VERITY && FS_VERITY
-+	default y
-+	help
-+	  Wsparcie dla OSTree-based immutable OS stack uzywane przez
-+	  HackerOS Immutable Edition. Integruje composefs, dm-verity
-+	  z OSTree hash tree format, oraz debian-ostree (rpm-ostree
-+	  equivalent dla Debiana) package manager integration.
+ drivers/md/dm-verity-target.c | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
 
 --- a/drivers/md/dm-verity-target.c
 +++ b/drivers/md/dm-verity-target.c
-@@ -1109,3 +1109,23 @@
- module_init(dm_verity_init);
- module_exit(dm_verity_exit);
+@@ -1836,3 +1836,21 @@
+ MODULE_AUTHOR("Will Drewry <wad@chromium.org>");
+ MODULE_DESCRIPTION(DM_NAME " target for transparent disk integrity checking");
  MODULE_LICENSE("GPL");
 +
 +#ifdef CONFIG_HACKEROS_OSTREE
 +/*
 + * HackerOS OSTree Integration: dm-verity rozszerzenia dla immutable OS.
 + *
-+ * OSTree uzywa dm-verity do weryfikacji integralnosci kazdego deployment
-+ * (kazdej "wersji" systemu w /ostree/deploy/). Standardowy dm-verity
-+ * wymaga pelnego hash tree w osobnej partycji; OSTree przechowuje
-+ * hash tree inline w composefs image (.cfs), co wymaga rozszerzonego
-+ * parsowania przez dm-verity target.
++ * OSTree uzywa dm-verity do weryfikacji integralnosci kazdego deployment.
++ * Standardowy dm-verity wymaga pelnego hash tree w osobnej partycji;
++ * OSTree przechowuje hash tree inline w composefs image (.cfs), co
++ * wymaga rozszerzonego parsowania przez dm-verity target.
 + *
 + * hackeros_verity_ostree_mode: gdy = 1, dm-verity target akceptuje
 + * OSTree-format hash tree (inline w composefs superblock) zamiast
