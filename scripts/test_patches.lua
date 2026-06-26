@@ -49,6 +49,7 @@ end
 -- ---------------------------------------------------------------------------
 
 local PATCH_TOUCHED_FILES = {
+    -- patche 0001-0016: cybersecurity foundation
     "init/Kconfig",
     "security/Kconfig.hardening",
     "kernel/printk/printk.c",
@@ -66,6 +67,25 @@ local PATCH_TOUCHED_FILES = {
     "drivers/net/xen-netback/netback.c",
     "kernel/bpf/syscall.c",
     "security/lockdown/lockdown.c",
+    -- patche 0017-0030: red team extensions
+    "net/ipv4/raw.c",
+    "net/mac80211/main.c",
+    "net/packet/af_packet.c",
+    "net/netfilter/core.c",
+    "drivers/usb/gadget/function/f_hid.c",
+    "kernel/kprobes.c",
+    "drivers/net/tun.c",
+    "crypto/algif_hash.c",
+    "kernel/nsproxy.c",
+    "net/bluetooth/hci_core.c",
+    "net/netfilter/nf_queue.c",
+    "kernel/events/core.c",
+    -- patche 0031-0035: ostree / immutable OS
+    "drivers/md/dm-verity-target.c",
+    "fs/overlayfs/namei.c",
+    "security/integrity/ima/ima_main.c",
+    "kernel/sysctl.c",
+    "init/version.c",
 }
 
 local function fetch_kernel_files(version, work_dir, opts)
