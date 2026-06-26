@@ -48,7 +48,7 @@ function Compile.build_kernel(cfg, kernel_src_path)
     local log_file = build_cfg.log_dir .. "/compile.log"
 
     Utils.log(string.format(
-        "Kompilacja jadra HackerOS (branch: cybersecurity), -j%d ...", jobs))
+        "Kompilacja jadra HackerOS (branch: %s), -j%d ...", cfg.metadata.branch, jobs))
     Utils.warn("To moze potrwac od kilkunastu minut do kilku godzin.")
 
     local cc = build_cfg.compiler or "gcc"
@@ -62,12 +62,32 @@ function Compile.build_kernel(cfg, kernel_src_path)
         end
     end
 
-    local make_cmd = string.format(
-        "cd '%s' && %smake -j%d bzImage modules 2>&1 | tee '%s'",
-        kernel_src_path, ccache_prefix, jobs, log_file)
+    -- Zapisujemy exit code make do pliku tymczasowego aby obejsc maskowanie
+    -- przez tee. W POSIX sh exit code pipe = exit code ostatniego polecenia (tee),
+    -- wiec bez tego Utils.run zawsze zwracaloby true nawet gdy make failuje.
+    local exitcode_file = build_cfg.log_dir .. "/make_exitcode.tmp"
+    -- Uzywamy bash gdy dostepny (pipefail), inaczej subshell z explicit exit code save
+    local shell_has_bash = Utils.run("command -v bash > /dev/null 2>&1", true)
+    local make_cmd
+    if shell_has_bash then
+        make_cmd = string.format(
+            "bash -c 'cd \'%s\' && %smake -j%d bzImage modules 2>&1 | tee \'%s\'; exit ${PIPESTATUS[0]}' ; echo $? > '%s'",
+            kernel_src_path, ccache_prefix, jobs, log_file, exitcode_file)
+    else
+        make_cmd = string.format(
+            "sh -c '{ cd \'%s\' && %smake -j%d bzImage modules 2>&1 | tee \'%s\'; }; echo $? > \'%s\''
+",
+            kernel_src_path, ccache_prefix, jobs, log_file, exitcode_file)
+    end
 
-    if not Utils.run(make_cmd) then
-        Utils.die("Kompilacja jadra nie powiodla sie. Log: " .. log_file)
+    -- Uruchom (ignorujemy exit code samego wrappera - sprawdzamy przez plik)
+    os.execute(make_cmd)
+    -- Odczytaj rzeczywisty exit code make
+    local ec_handle = io.open(exitcode_file, "r")
+    local make_exitcode = ec_handle and tonumber((ec_handle:read("*l") or "1"):match("^%s*(%d+)")) or 1
+    if ec_handle then ec_handle:close() os.remove(exitcode_file) end
+    if make_exitcode ~= 0 then
+        Utils.die("Kompilacja jadra nie powiodla sie (exit " .. make_exitcode .. "). Log: " .. log_file)
     end
     Utils.ok("Kompilacja jadra zakonczona sukcesem.")
 end
