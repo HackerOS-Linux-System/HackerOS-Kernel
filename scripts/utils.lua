@@ -75,6 +75,12 @@ end
 -- Shell helpers
 -- ---------------------------------------------------------------------
 
+--- Bezpiecznie cytuje sciezke do uzycia w poleceniu powloki (single-quote escaping).
+-- Zamienia kazdy ' na '\'' co jest bezpieczne w /bin/sh i bash.
+function Utils.shell_quote(s)
+    return "'" .. tostring(s):gsub("'", "'\''") .. "'"
+end
+
 --- Wykonuje komende w shellu. Zwraca true/false + kod wyjscia.
 -- @param cmd string
 -- @param quiet boolean opcjonalnie wycisz output komendy
