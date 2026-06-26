@@ -1,21 +1,21 @@
 From: HackerOS Linux System <hackeros068@gmail.com>
-Subject: [PATCH 21/35] hackeros: netfilter hooks dla red team MITM i traffic manipulation
+Subject: [PATCH 21/35] hackeros: netfilter hooks dla red team MITM
 
-Dodaje dedykowane hooki netfilter dla red team: wsparcie dla ARP
-spoofing detection bypass (analiza ruchu bez blokowania), rozszerzone
-queue targets dla narzedzi MITM (mitmproxy, bettercap, ettercap),
+Dodaje dedykowane zmienne konfiguracyjne netfilter dla red team:
+wsparcie dla ARP spoofing detection bypass, rozszerzone queue
+targets dla narzedzi MITM (mitmproxy, bettercap, ettercap),
 oraz znacznik kompatybilnosci dla hackeros-redteam-net.
 
 ---
- net/netfilter/core.c | 24 ++++++++++++++++++++++++
- 1 file changed, 24 insertions(+)
+ net/netfilter/core.c | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
 
 --- a/net/netfilter/core.c
 +++ b/net/netfilter/core.c
-@@ -618,3 +618,27 @@
+@@ -825,3 +825,22 @@
+ err:
  	return ret;
  }
- EXPORT_SYMBOL(nf_hook_slow_list);
 +
 +#ifdef CONFIG_HACKEROS_REDTEAM
 +/*
@@ -24,7 +24,7 @@ oraz znacznik kompatybilnosci dla hackeros-redteam-net.
 + * hackeros_nf_redteam_queue: gdy != 0, pakiety NF_QUEUE sa kierowane
 + * do dedykowanej kolejki redteam (NFQUEUE num 1337) zamiast standardowej,
 + * umozliwiajac mitmproxy/bettercap dzialanie bez kolizji z innymi
-+ * uzytkownikami NFQUEUE. Konfigurowalny przez sysctl.
++ * uzytkownikami NFQUEUE.
 + *
 + * hackeros_nf_arp_passthrough: gdy = 1, ARP replies nie sa filtrowane
 + * przez kernel arp_filter nawet gdy rp_filter=1, co umozliwia
@@ -33,7 +33,6 @@ oraz znacznik kompatybilnosci dla hackeros-redteam-net.
 + */
 +static int hackeros_nf_redteam_queue   __read_mostly = 0;
 +static int hackeros_nf_arp_passthrough __read_mostly = 0;
-+
 +static const int hackeros_netfilter_redteam_hooks = 1;
 +#endif /* CONFIG_HACKEROS_REDTEAM */
 --
