@@ -92,7 +92,7 @@ function Kconfig.generate_fragment(cfg, fragments_dir)
     local lines = {
         "# =========================================================",
         "# Auto-generowany fragment .config - HackerOS Kernel",
-        "# Branch: cybersecurity",
+        "# Branch: " .. (cfg.metadata and cfg.metadata.branch or "unknown"),
         "# Wygenerowano przez kconfig.lua na podstawie config.hk",
         "# =========================================================",
         "",
@@ -120,6 +120,41 @@ function Kconfig.generate_fragment(cfg, fragments_dir)
     append_entries(lines, CYBERSEC_MAP, cfg.cybersecurity_subsystems)
 
     table.insert(lines, "")
+    table.insert(lines, "# --- Red Team extensions ---")
+    if cfg.redteam and cfg.redteam.enabled then
+        table.insert(lines, "CONFIG_HACKEROS_REDTEAM=y")
+        -- WiFi packet injection
+        table.insert(lines, "CONFIG_MAC80211_HACKEROS_REDTEAM=y")
+        -- USB HID gadget (Rubber Ducky)
+        table.insert(lines, "CONFIG_USB_GADGET_HACKEROS_REDTEAM=y")
+        -- Raw socket extended
+        table.insert(lines, "CONFIG_AF_PACKET=y")
+        -- Raw sockets
+        table.insert(lines, "CONFIG_IP_RAW=y")
+    end
+
+    table.insert(lines, "")
+    table.insert(lines, "# --- OSTree / immutable OS integration ---")
+    if cfg.ostree and cfg.ostree.enabled then
+        table.insert(lines, "CONFIG_HACKEROS_OSTREE=y")
+        if cfg.ostree.dm_verity_ostree then
+            table.insert(lines, "CONFIG_DM_VERITY=y")
+            table.insert(lines, "CONFIG_DM_VERITY_VERIFY_ROOTHASH_SIG=y")
+        end
+        if cfg.ostree.composefs_support then
+            table.insert(lines, "CONFIG_OVERLAY_FS=y")
+            table.insert(lines, "CONFIG_OVERLAY_FS_INDEX=y")
+            table.insert(lines, "CONFIG_OVERLAY_FS_METACOPY=y")
+            table.insert(lines, "CONFIG_OVERLAY_FS_REDIRECT_DIR=y")
+        end
+        if cfg.ostree.ima_verification then
+            table.insert(lines, "CONFIG_IMA=y")
+            table.insert(lines, "CONFIG_IMA_APPRAISE=y")
+            table.insert(lines, "CONFIG_IMA_HACKEROS_OSTREE=y")
+        end
+    end
+
+    table.insert(lines, "")
     table.insert(lines, "# --- Branding HackerOS ---")
     if cfg.versioning and cfg.versioning.uname_suffix then
         table.insert(lines, string.format(
@@ -138,19 +173,50 @@ function Kconfig.merge_and_finalize(cfg, kernel_src_path, generated_fragment_pat
     local build_cfg = cfg.build
     local base_config = build_cfg.base_config
 
-    if not Utils.file_exists(base_config) then
-        Utils.warn("Brak base_config (" .. base_config .. ") - uzywam domyslnego defconfig jadra.")
+    -- Strategia konfiguracji:
+    -- PRODUKCJA (base.config = config/base.config):
+    --   1. x86_64_defconfig jako punkt startowy (~2500 opcji, pelny kernel)
+    --   2. base.config scala sie na wierzchu (pelny red team: WiFi injection,
+    --      USB gadget HID, BT HCI, pelny netfilter/NFQUEUE, OSTree/dm-verity, XEN...)
+    --   3. Auto-generowany fragment hardeningu z config.hk
+    --   4. make olddefconfig dopelnia zaleznosci
+    --   Efekt: PELNE jadro jak Debian + HackerOS red team extensions.
+    --
+    -- CI SMOKE (base.config = config/ci-tiny.config):
+    --   1. tinyconfig jako punkt startowy (minimum dla szybkiego buildu)
+    --   2. ci-tiny.config scala sie na wierzchu (tylko co potrzebne dla patchy)
+    --   3. Auto-generowany fragment hardeningu
+    --   4. make olddefconfig
+    --   Efekt: minimalistyczne jadro do weryfikacji ze patche sie kompiluja.
+
+    local is_ci_tiny = base_config:match("ci%-tiny") ~= nil
+
+    if is_ci_tiny then
+        Utils.log("Tryb CI-FAST: tinyconfig jako punkt startowy...")
         Utils.run_or_die(
-            string.format("make -C '%s' defconfig", kernel_src_path),
-            "Nie udalo sie wygenerowac domyslnej konfiguracji (defconfig).")
+            string.format("make -C '%s' tinyconfig", kernel_src_path),
+            "Nie udalo sie wygenerowac tinyconfig.")
     else
+        Utils.log("Pelny build: x86_64_defconfig jako punkt startowy...")
         Utils.run_or_die(
-            string.format("cp '%s' '%s/.config'", base_config, kernel_src_path),
-            "Nie udalo sie skopiowac base_config do drzewa zrodel.")
+            string.format("make -C '%s' x86_64_defconfig", kernel_src_path),
+            "Nie udalo sie wygenerowac x86_64_defconfig.")
+        Utils.info("base.config zostanie dolozony jako fragment (pelny zestaw sterownikow).")
     end
 
-    -- zbieramy wszystkie fragmenty: wlasny wygenerowany + katalog fragments_dir
-    local fragment_paths = { generated_fragment_path }
+    if not Utils.file_exists(base_config) then
+        Utils.warn("Brak base_config (" .. base_config .. ") - pomijam ten fragment.")
+    end
+
+    -- zbieramy wszystkie fragmenty: base_config (pelny overlay) + wlasny wygenerowany
+    -- + ewentualne dodatkowe z fragments_dir.
+    -- KOLEJNOSC WAZNA: base_config przed hackeros fragment, bo fragment moze
+    -- nadpisywac wartosci z base_config (np. hardening nadpisuje defconfig defaults).
+    local fragment_paths = {}
+    if Utils.file_exists(base_config) then
+        table.insert(fragment_paths, base_config)
+    end
+    table.insert(fragment_paths, generated_fragment_path)
 
     if build_cfg.fragments_dir and Utils.dir_exists(build_cfg.fragments_dir) then
         local listing = Utils.capture(
