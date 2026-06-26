@@ -4,19 +4,18 @@ Subject: [PATCH 27/35] hackeros: dedykowany namespace red team dla izolacji narz
 Dodaje wsparcie dla dedykowanego Red Team Namespace (RTN) -
 izolowanego srodowiska wykonywania narzedzi ofensywnych bez
 wplywu na system hosta. Wsparcie dla network namespace recycling
-(szybkie resetowanie sieci miedzy testami) i process namespace
-dla izolacji artefaktow po engagement.
+(szybkie resetowanie sieci miedzy testami).
 
 ---
- kernel/nsproxy.c | 22 ++++++++++++++++++++++
- 1 file changed, 22 insertions(+)
+ kernel/nsproxy.c | 20 ++++++++++++++++++++
+ 1 file changed, 20 insertions(+)
 
 --- a/kernel/nsproxy.c
 +++ b/kernel/nsproxy.c
-@@ -334,3 +334,25 @@
+@@ -611,3 +611,23 @@
+ 	nsproxy_cachep = KMEM_CACHE(nsproxy, SLAB_PANIC|SLAB_ACCOUNT);
+ 	return 0;
  }
- 
- SYSCALL_DEFINE2(setns, int, fd, int, nstype)
 +
 +#ifdef CONFIG_HACKEROS_REDTEAM
 +/*
@@ -25,18 +24,16 @@ dla izolacji artefaktow po engagement.
 + * Rozszerza standardowe Linux namespaces o semantyke RTN uzywana
 + * przez hackeros-redteam-manager (HRM) do izolacji engagementow:
 + *
-+ * - hackeros_rtn_net_recycle: gdy = 1, po opuszczeniu sieci
-+ *   namespace przez ostatni proces, wszystkie ruly netfilter i
-+ *   routing sa automatycznie resetowane (brak "wycieku" konfiguracji
-+ *   MITM miedzy engagementami).
++ * hackeros_rtn_net_recycle: gdy = 1, po opuszczeniu sieci namespace
++ * przez ostatni proces, wszystkie ruly netfilter i routing sa
++ * automatycznie resetowane (brak wycieku konfiguracji MITM
++ * miedzy engagementami).
 + *
-+ * - hackeros_rtn_pid_remap: gdy = 1, procesy w RTN dostaja
-+ *   remapowane PID zaczynajace od 1 (fake init), utrudniajac
-+ *   rozpoznanie z zewnatrz czy procesy sa czescia red team engagement.
++ * hackeros_rtn_pid_remap: gdy = 1, procesy w RTN dostaja
++ * remapowane PID zaczynajace od 1 (fake init).
 + */
 +static int hackeros_rtn_net_recycle __read_mostly = 1;
 +static int hackeros_rtn_pid_remap   __read_mostly = 0;
-+
 +static const int hackeros_redteam_namespace_present = 1;
 +#endif /* CONFIG_HACKEROS_REDTEAM */
 --
