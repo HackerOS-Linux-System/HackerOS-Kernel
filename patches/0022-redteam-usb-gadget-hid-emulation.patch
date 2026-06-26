@@ -3,37 +3,21 @@ Subject: [PATCH 22/35] hackeros: USB Gadget HID emulation dla red team (rubber d
 
 Rozszerza USB Gadget subsystem o wsparcie dla emulacji HID
 (keyboard/mouse) uzywane przez narzedzia red team typu USB Rubber
-Ducky i Bash Bunny. Dodaje dedykowany configfs interface oraz
-znacznik obecnosci dla hackeros-usb-attack-tools.
+Ducky i Bash Bunny. Dodaje dedykowany interface oraz znacznik
+obecnosci dla hackeros-usb-attack-tools.
 
 ---
- drivers/usb/gadget/Kconfig       |  9 +++++++++
- drivers/usb/gadget/function/f_hid.c | 18 ++++++++++++++++++
- 2 files changed, 27 insertions(+)
-
---- a/drivers/usb/gadget/Kconfig
-+++ b/drivers/usb/gadget/Kconfig
-@@ -11,6 +11,15 @@
- 
- if USB_GADGET
- 
-+config USB_GADGET_HACKEROS_REDTEAM
-+	bool "HackerOS Red Team: USB HID emulation (Rubber Ducky/Bash Bunny)"
-+	depends on USB_GADGET && USB_RAW_GADGET && HACKEROS_REDTEAM
-+	default y
-+	help
-+	  Wsparcie dla emulacji USB HID dla narzedzi red team:
-+	  USB Rubber Ducky, Bash Bunny, O.MG Cable.
-+	  Wymaga USB_RAW_GADGET i odpowiedniego sprzetowego USB OTG.
+ drivers/usb/gadget/function/f_hid.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
 
 --- a/drivers/usb/gadget/function/f_hid.c
 +++ b/drivers/usb/gadget/function/f_hid.c
-@@ -851,3 +851,21 @@
+@@ -1698,3 +1698,18 @@
+ 
+ 	class_unregister(&hidg_class);
  }
- MODULE_LICENSE("GPL");
- MODULE_AUTHOR("Fabien Chouteau, Peter Korsgaard");
 +
-+#ifdef CONFIG_USB_GADGET_HACKEROS_REDTEAM
++#ifdef CONFIG_HACKEROS_REDTEAM
 +/*
 + * HackerOS Red Team: rozszerzenia USB HID dla narzedzi emulacji.
 + * Umozliwia configfs-based konfiguracje HID descriptors dla
@@ -42,12 +26,10 @@ znacznik obecnosci dla hackeros-usb-attack-tools.
 + * hackeros_hid_inject_delay_ms: opoznienie miedzy wstrzykiwanymi
 + * keystrokes (domyslnie 10ms, kompatybilne z Rubber Ducky scripts).
 + * hackeros_hid_layout: uklad klawiatury (0=US, 1=PL, 2=DE itd.)
-+ * konfigurowalny przez /sys/kernel/hackeros/hid/.
 + */
 +static unsigned int hackeros_hid_inject_delay_ms __read_mostly = 10;
 +static unsigned int hackeros_hid_layout          __read_mostly = 0;
-+
 +static const int hackeros_usb_hid_redteam_present = 1;
-+#endif /* CONFIG_USB_GADGET_HACKEROS_REDTEAM */
++#endif /* CONFIG_HACKEROS_REDTEAM */
 --
 2.43.0
