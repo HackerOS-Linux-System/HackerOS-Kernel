@@ -30,7 +30,7 @@ set -e
 KERNEL_RELEASE="%KERNEL_RELEASE%"
 
 echo "=================================================================="
-echo " HackerOS Kernel (branch: cybersecurity) - postinst"
+echo " HackerOS Kernel (%EDITION%) - postinst"
 echo " Wersja: ${KERNEL_RELEASE}"
 echo "=================================================================="
 
@@ -275,17 +275,20 @@ local function generate_control(cfg, kernel_release, installed_size_kb, is_heade
     end
 
     table.insert(lines, "Homepage: " .. (meta.homepage or ""))
+    local patch_count = cfg.patches and #cfg.patches.apply_order or 0
+    local edition = (cfg.metadata and cfg.metadata.edition) or meta.branch
     local desc = is_headers
-        and string.format("Naglowki jadra HackerOS Kernel %s (cybersecurity)\n"
+        and string.format("Naglowki jadra HackerOS Kernel %s (%s)\n"
             .. " Naglowki jadra dla %s.\n .\n Wymagane do budowania modulow"
-            .. " out-of-tree (DKMS) dla HackerOS Kernel Cybersecurity Edition.",
-            kernel_release, kernel_release)
+            .. " out-of-tree (DKMS) dla HackerOS Kernel %s.",
+            kernel_release, edition, kernel_release, edition)
         or string.format("%s (%s)\n %s\n .\n Jadro zoptymalizowane dla"
-            .. " HackerOS Cybersecurity Edition. Zawiera 16-patchowy"
-            .. " patchset hardeningu, wsparcie Xen dom0/domU, eBPF"
-            .. " forensics, audyt USB/TCP-MD5/BPF/lockdown oraz"
-            .. " pelny hardening runtime (sysctl + GRUB_CMDLINE).",
-            meta.name, meta.branch, meta.description)
+            .. " HackerOS %s Edition. Zawiera %d-patchowy"
+            .. " patchset (cybersecurity + red team + ostree),"
+            .. " wsparcie Xen dom0/domU, WiFi injection, USB HID emulation,"
+            .. " Bluetooth HCI monitor, NFQUEUE MITM, OSTree/composefs"
+            .. " oraz pelny hardening runtime (sysctl + GRUB_CMDLINE).",
+            meta.name, meta.branch, meta.description, edition, patch_count)
     table.insert(lines, "Description: " .. desc)
     return table.concat(lines, "\n") .. "\n"
 end
@@ -327,6 +330,7 @@ function DebPackage.build(cfg, destdir, kernel_release, signing_key_path, signin
         REMOVE_OLD_KERNEL     = tostring(cfg.package.remove_old_kernel),
         POSTINST_GRUB_UPDATE  = tostring(cfg.package.postinst_grub_update),
         SET_DEFAULT           = tostring(cfg.package.set_default),
+        EDITION               = (cfg.metadata and cfg.metadata.edition) or cfg.metadata.branch,
     }
 
     Utils.write_file(debian_dir .. "/postinst", render(POSTINST_TEMPLATE, tpl_vars))
