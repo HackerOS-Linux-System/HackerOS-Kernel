@@ -7,34 +7,17 @@ wsparcie dla OSTree-signed commits przez IMA appraisal, oraz
 audit trail dla kazdego OSTree deployment switch.
 
 ---
- security/integrity/ima/Kconfig        |  9 +++++++++
- security/integrity/ima/ima_main.c     | 20 ++++++++++++++++++++
- 2 files changed, 29 insertions(+)
-
---- a/security/integrity/ima/Kconfig
-+++ b/security/integrity/ima/Kconfig
-@@ -2,6 +2,15 @@
- config IMA
- 	bool "Integrity Measurement Architecture(IMA)"
-
-+config IMA_HACKEROS_OSTREE
-+	bool "HackerOS OSTree IMA integration"
-+	depends on IMA && HACKEROS_OSTREE
-+	default y
-+	help
-+	  Integracja IMA z OSTree deployment verification:
-+	  weryfikacja OSTree commit signatures podczas boot,
-+	  IMA measurement list dla composefs mounts,
-+	  audit trail dla debian-ostree deploy/rollback.
+ security/integrity/ima/ima_main.c | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
 
 --- a/security/integrity/ima/ima_main.c
 +++ b/security/integrity/ima/ima_main.c
-@@ -1004,3 +1004,23 @@
- }
- 
- late_initcall(init_ima);
+@@ -1339,3 +1339,22 @@
+ 	/* Start IMA after the TPM is available */
+ 	.initcall_late = init_ima,
+ };
 +
-+#ifdef CONFIG_IMA_HACKEROS_OSTREE
++#ifdef CONFIG_HACKEROS_OSTREE
 +/*
 + * HackerOS OSTree IMA: weryfikacja integralnosci deploymentu.
 + *
@@ -51,6 +34,6 @@ audit trail dla kazdego OSTree deployment switch.
 + */
 +static int hackeros_ima_ostree_enforce __read_mostly = 1;
 +static const int hackeros_ima_ostree_present = 1;
-+#endif /* CONFIG_IMA_HACKEROS_OSTREE */
++#endif /* CONFIG_HACKEROS_OSTREE */
 --
 2.43.0
