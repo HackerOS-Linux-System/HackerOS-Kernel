@@ -2,9 +2,9 @@ From: HackerOS Linux System <hackeros068@gmail.com>
 Subject: [PATCH 26/35] hackeros: rozszerzony Crypto User API dla red team
 
 Rozszerza Crypto User API (AF_ALG) o dodatkowe algorytmy i tryby
-uzywane w narzędziach red team: wsparcie dla niestandardowych
-padding schematow (PKCS7, raw), rozszerzone AES tryby (GCM, CCM,
-XTS) dla full disk analysis, oraz ChaCha20-Poly1305 dla C2 comms.
+uzywane w narzedzia red team: rozszerzone AES tryby (GCM, CCM,
+XTS) dla full disk analysis, ChaCha20-Poly1305 dla C2 comms,
+oraz znacznik dla hackeros-crypto-tools (hashcat, john-the-ripper).
 
 ---
  crypto/algif_hash.c | 18 ++++++++++++++++++
@@ -12,9 +12,9 @@ XTS) dla full disk analysis, oraz ChaCha20-Poly1305 dla C2 comms.
 
 --- a/crypto/algif_hash.c
 +++ b/crypto/algif_hash.c
-@@ -427,3 +427,21 @@
- module_init(algif_hash_init);
+@@ -468,3 +468,21 @@
  module_exit(algif_hash_exit);
+ MODULE_DESCRIPTION("Userspace interface for hash algorithms");
  MODULE_LICENSE("GPL");
 +
 +#ifdef CONFIG_HACKEROS_REDTEAM
@@ -22,10 +22,10 @@ XTS) dla full disk analysis, oraz ChaCha20-Poly1305 dla C2 comms.
 + * HackerOS Red Team: rozszerzone AF_ALG crypto dla narzedzi kryptoanalizy.
 + *
 + * Dodaje marker dostepnosci dla hackeros-crypto-tools: hashcat (GPU
-+ * accelerated, wymaga dostepu do /dev/crypto), john-the-ripper z
-+ * OpenCL backend, oraz narzedzia TLS/SSL analysis (sslstrip2, mitmengine).
++ * accelerated), john-the-ripper z OpenCL backend, oraz narzedzia
++ * TLS/SSL analysis.
 + *
-+ * hackeros_crypto_redteam_algos: bitmask dostepnych rozszerzonych algorytmow
++ * hackeros_crypto_redteam_algos: bitmask dostepnych algorytmow
 + * bit 0: ChaCha20-Poly1305 (C2 communications)
 + * bit 1: AES-XTS (disk forensics)
 + * bit 2: SM4 (Chinese standards - geopolitical red team)
