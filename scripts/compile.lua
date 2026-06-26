@@ -62,32 +62,43 @@ function Compile.build_kernel(cfg, kernel_src_path)
         end
     end
 
-    -- Zapisujemy exit code make do pliku tymczasowego aby obejsc maskowanie
-    -- przez tee. W POSIX sh exit code pipe = exit code ostatniego polecenia (tee),
-    -- wiec bez tego Utils.run zawsze zwracaloby true nawet gdy make failuje.
     local exitcode_file = build_cfg.log_dir .. "/make_exitcode.tmp"
-    -- Uzywamy bash gdy dostepny (pipefail), inaczej subshell z explicit exit code save
-    local shell_has_bash = Utils.run("command -v bash > /dev/null 2>&1", true)
-    local make_cmd
-    if shell_has_bash then
-        make_cmd = string.format(
-            "bash -c 'cd \'%s\' && %smake -j%d bzImage modules 2>&1 | tee \'%s\'; exit ${PIPESTATUS[0]}' ; echo $? > '%s'",
-            kernel_src_path, ccache_prefix, jobs, log_file, exitcode_file)
-    else
-        make_cmd = string.format(
-            "sh -c '{ cd \'%s\' && %smake -j%d bzImage modules 2>&1 | tee \'%s\'; }; echo $? > \'%s\''
-",
-            kernel_src_path, ccache_prefix, jobs, log_file, exitcode_file)
-    end
+    local wrapper_file  = build_cfg.log_dir .. "/make_wrapper.sh"
 
-    -- Uruchom (ignorujemy exit code samego wrappera - sprawdzamy przez plik)
-    os.execute(make_cmd)
-    -- Odczytaj rzeczywisty exit code make
+    Utils.mkdir_p(build_cfg.log_dir)
+
+    -- Generujemy tymczasowy skrypt powloki zamiast skomplikowanego shell-quoting
+    -- w string.format (eliminuje problemy z ' " \\ wewnatrz Lua string literalow).
+    local sq = Utils.shell_quote
+    local wrapper_lines = {
+        "#!/bin/bash",
+        "set -o pipefail 2>/dev/null || true",
+        "cd " .. sq(kernel_src_path),
+        ccache_prefix .. "make -j" .. tostring(jobs)
+            .. " bzImage modules 2>&1 | tee " .. sq(log_file),
+        "MAKE_EXIT=${PIPESTATUS[0]:-$?}",
+        "echo ${MAKE_EXIT} > " .. sq(exitcode_file),
+        "exit ${MAKE_EXIT}",
+    }
+    Utils.write_file(wrapper_file, table.concat(wrapper_lines, "\n") .. "\n")
+    os.execute("chmod +x " .. sq(wrapper_file))
+
+    -- Uruchom wrapper; ignorujemy jego exit code bo czytamy z pliku
+    os.execute(sq(wrapper_file) .. " || true")
+
+    -- Odczytaj rzeczywisty exit code make z pliku
     local ec_handle = io.open(exitcode_file, "r")
-    local make_exitcode = ec_handle and tonumber((ec_handle:read("*l") or "1"):match("^%s*(%d+)")) or 1
-    if ec_handle then ec_handle:close() os.remove(exitcode_file) end
+    local make_exitcode = 1
+    if ec_handle then
+        local raw = ec_handle:read("*l") or "1"
+        make_exitcode = tonumber(raw:match("^%s*(%d+)")) or 1
+        ec_handle:close()
+        os.remove(exitcode_file)
+    end
+    os.remove(wrapper_file)
     if make_exitcode ~= 0 then
-        Utils.die("Kompilacja jadra nie powiodla sie (exit " .. make_exitcode .. "). Log: " .. log_file)
+        Utils.die("Kompilacja jadra nie powiodla sie (exit "
+            .. make_exitcode .. "). Log: " .. log_file)
     end
     Utils.ok("Kompilacja jadra zakonczona sukcesem.")
 end
