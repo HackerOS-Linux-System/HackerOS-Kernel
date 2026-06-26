@@ -1,20 +1,20 @@
-#!/usr/bin/env lua5.5
+#!/usr/bin/env lua
 --[[
     ============================================================================
     build.lua  -  HackerOS Kernel (branch: cybersecurity) build system
     ============================================================================
 
     Uzycie:
-      lua5.5 build.lua                   - pelny build
-      lua5.5 build.lua --version=7.2     - wymusza konkretna wersje jadra
-      lua5.5 build.lua --no-download     - uzywa juz pobranych/rozpakowanych zrodel
-      lua5.5 build.lua --jobs=8          - nadpisuje liczbe watkow kompilacji
-      lua5.5 build.lua --skip-patches    - pomija nakladanie patchy (debug)
-      lua5.5 build.lua --keep-going      - kontynuuje mimo bledow niekrytycznych
-      lua5.5 build.lua --config=PATH     - inny plik .hk
-      lua5.5 build.lua --no-sign        - pomija podpisywanie modulow
-      lua5.5 build.lua --no-headers     - pomija budowanie pakietu naglowkow
-      lua5.5 build.lua --help
+      lua build.lua                   - pelny build
+      lua build.lua --version=7.2     - wymusza konkretna wersje jadra
+      lua build.lua --no-download     - uzywa juz pobranych/rozpakowanych zrodel
+      lua build.lua --jobs=8          - nadpisuje liczbe watkow kompilacji
+      lua build.lua --skip-patches    - pomija nakladanie patchy (debug)
+      lua build.lua --keep-going      - kontynuuje mimo bledow niekrytycznych
+      lua build.lua --config=PATH     - inny plik .hk
+      lua build.lua --no-sign        - pomija podpisywanie modulow
+      lua build.lua --no-headers     - pomija budowanie pakietu naglowkow
+      lua build.lua --help
 --]]
 
 local script_path = arg and arg[0] or "build.lua"
@@ -72,7 +72,7 @@ local function print_help()
 HackerOS Kernel build.lua - build system jadra cybersecurity dla HackerOS
 
 Uzycie:
-  lua5.5 build.lua [opcje]
+  lua build.lua [opcje]
 
 Opcje:
   --version=X.Y      Wymusza konkretna wersje jadra (>= 7.1)
@@ -90,11 +90,11 @@ Opcje:
   --help, -h              Wyswietla pomoc
 
 Przyklady:
-  lua5.5 build.lua
-  lua5.5 build.lua --version=7.3 --jobs=16
-  lua5.5 build.lua --no-download --skip-patches --keep-going
-  lua5.5 build.lua --no-sign --no-headers   (szybszy build bez extra paczek)
-  lua5.5 build.lua --ci-fast                (smoke-build do CI, kilka minut)
+  lua build.lua
+  lua build.lua --version=7.3 --jobs=16
+  lua build.lua --no-download --skip-patches --keep-going
+  lua build.lua --no-sign --no-headers   (szybszy build bez extra paczek)
+  lua build.lua --ci-fast                (smoke-build do CI, kilka minut)
 ]])
 end
 
