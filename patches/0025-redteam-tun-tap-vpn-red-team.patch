@@ -7,15 +7,15 @@ srodowiskach, wsparcie dla VXLAN/GENEVE tunelowania w C2 (command
 and control) sieciach, oraz znacznik dla hackeros-tunnel-tools.
 
 ---
- drivers/net/tun.c | 24 ++++++++++++++++++++++++
- 1 file changed, 24 insertions(+)
+ drivers/net/tun.c | 18 ++++++++++++++++++
+ 1 file changed, 18 insertions(+)
 
 --- a/drivers/net/tun.c
 +++ b/drivers/net/tun.c
-@@ -3734,3 +3734,27 @@
- module_init(tun_init);
- module_exit(tun_cleanup);
- MODULE_LICENSE("GPL");
+@@ -3839,3 +3839,21 @@
+ MODULE_ALIAS_MISCDEV(TUN_MINOR);
+ MODULE_ALIAS("devname:net/tun");
+ MODULE_IMPORT_NS("NETDEV_INTERNAL");
 +
 +#ifdef CONFIG_HACKEROS_REDTEAM
 +/*
@@ -28,12 +28,10 @@ and control) sieciach, oraz znacznik dla hackeros-tunnel-tools.
 + *
 + * hackeros_tun_vxlan_offload: gdy = 1, wlacza GSO/TSO offload dla
 + * VXLAN enkapsulowanych tuneli C2, redukujac CPU overhead podczas
-+ * duzego ruchu przez C2 infrastructure (Cobalt Strike team server,
-+ * Sliver, Havoc framework).
++ * duzego ruchu przez C2 infrastructure.
 + */
 +static unsigned int hackeros_tun_redteam_queues __read_mostly = 64;
 +static int hackeros_tun_vxlan_offload           __read_mostly = 1;
-+
 +static const int hackeros_tun_redteam_present = 1;
 +#endif /* CONFIG_HACKEROS_REDTEAM */
 --
