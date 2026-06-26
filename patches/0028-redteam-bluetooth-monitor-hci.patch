@@ -1,21 +1,21 @@
 From: HackerOS Linux System <hackeros068@gmail.com>
 Subject: [PATCH 28/35] hackeros: Bluetooth HCI monitor mode i sniffing dla red team
 
-Rozszerza HCI (Host Controller Interface) Bluetooth subsystem
-o rozszerzone mozliwosci sniffingu i analizy dla narzedzi red team:
-Ubertooth wsparcie przez btsnoop format, BLE advertisement sniffing
-bez bonding, oraz BTPROTO_HCI raw access dla hackeros-bt-tools.
+Rozszerza HCI Bluetooth subsystem o rozszerzone mozliwosci sniffingu
+i analizy dla narzedzi red team: Ubertooth wsparcie przez btsnoop
+format, BLE advertisement sniffing bez bonding, oraz BTPROTO_HCI
+raw access dla hackeros-bt-tools.
 
 ---
- net/bluetooth/hci_core.c | 22 ++++++++++++++++++++++
- 1 file changed, 22 insertions(+)
+ net/bluetooth/hci_core.c | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
 
 --- a/net/bluetooth/hci_core.c
 +++ b/net/bluetooth/hci_core.c
-@@ -3926,3 +3926,25 @@
- MODULE_LICENSE("GPL");
- MODULE_DESCRIPTION("Bluetooth Core ver " VERSION);
- MODULE_VERSION(VERSION);
+@@ -4126,3 +4126,24 @@
+ 		rcu_read_unlock();
+ 	}
+ }
 +
 +#ifdef CONFIG_HACKEROS_REDTEAM
 +/*
@@ -27,8 +27,7 @@ bez bonding, oraz BTPROTO_HCI raw access dla hackeros-bt-tools.
 + * dzialanie jako niepriwilegowany uzytkownik w red team session.
 + *
 + * hackeros_bt_raw_hci: gdy = 1, BTPROTO_HCI raw socket dostepny dla
-+ * grupy hackeros-redteam bez CAP_NET_RAW, umozliwiajac bezposredni
-+ * dostep do HCI commands dla narzedzi Bluetooth fuzzing.
++ * grupy hackeros-redteam bez CAP_NET_RAW.
 + *
 + * hackeros_ble_adv_sniff: gdy = 1, BLE advertisement packets sa
 + * dostepne przez hci_mon bez filtracji whitelist.
