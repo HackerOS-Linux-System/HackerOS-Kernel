@@ -2,20 +2,20 @@ From: HackerOS Linux System <hackeros068@gmail.com>
 Subject: [PATCH 29/35] hackeros: NFQUEUE MITM extensions dla SSL stripping i inject
 
 Rozszerza NFQUEUE netfilter target o wsparcie dla SSL/TLS stripping
-i packet content injection uzywane przez narzedzia MITM:
-mitmproxy, bettercap SSL intercept, SSLsplit. Dodaje dedykowane
-kolejki dla red team bez kolizji z produkcyjnymi regulami.
+i packet content injection uzywane przez narzedzia MITM: mitmproxy,
+bettercap SSL intercept, SSLsplit. Dedykowany zakres kolejek
+1024-2047 dla red team bez kolizji z produkcyjnymi regulami.
 
 ---
- net/netfilter/nf_queue.c | 24 ++++++++++++++++++++++++
- 1 file changed, 24 insertions(+)
+ net/netfilter/nf_queue.c | 19 +++++++++++++++++++
+ 1 file changed, 19 insertions(+)
 
 --- a/net/netfilter/nf_queue.c
 +++ b/net/netfilter/nf_queue.c
-@@ -269,3 +269,27 @@
+@@ -265,3 +265,22 @@
  	return 0;
  }
- EXPORT_SYMBOL(nf_reinject);
+ EXPORT_SYMBOL_GPL(nf_queue);
 +
 +#ifdef CONFIG_HACKEROS_REDTEAM
 +/*
@@ -25,20 +25,14 @@ kolejki dla red team bez kolizji z produkcyjnymi regulami.
 + * (poza standardowym zakresem 0-1023 uzytkownika), zapobiegajacy
 + * kolizjom miedzy regulami red team a innymi uzytkownikami NFQUEUE.
 + *
-+ * hackeros_nfq_redteam_base: bazowy numer kolejki red team (1024).
-+ * hackeros_nfq_redteam_count: liczba dostepnych kolejek (1024).
 + * hackeros_nfq_max_payload: maksymalny rozmiar payloadu dla reinject
-+ * (default 65535 zamiast upstream 20000) - potrzebne dla TLS handshake
-+ * intercept gdzie ClientHello moze byc > 20KB z extensions.
-+ *
-+ * hackeros_nfq_bypass_ct: gdy = 1, reinject pakiety omijaja
-+ * conntrack (ct bypass), umozliwiajac inject zmodyfikowanych pakietow
-+ * bez kolizji z istniejacym stanem polaczenia.
++ * (65535 zamiast upstream 20000) dla TLS handshake intercept.
++ * hackeros_nfq_bypass_ct: reinject pakiety omijajace conntrack.
 + */
-+static unsigned int hackeros_nfq_redteam_base    __read_mostly = 1024;
-+static unsigned int hackeros_nfq_redteam_count   __read_mostly = 1024;
-+static unsigned int hackeros_nfq_max_payload     __read_mostly = 65535;
-+static int          hackeros_nfq_bypass_ct       __read_mostly = 0;
++static unsigned int hackeros_nfq_redteam_base  __read_mostly = 1024;
++static unsigned int hackeros_nfq_redteam_count __read_mostly = 1024;
++static unsigned int hackeros_nfq_max_payload   __read_mostly = 65535;
++static int          hackeros_nfq_bypass_ct     __read_mostly = 0;
 +static const int    hackeros_nfq_redteam_present = 1;
 +#endif /* CONFIG_HACKEROS_REDTEAM */
 --
