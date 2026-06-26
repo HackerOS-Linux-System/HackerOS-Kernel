@@ -1,10 +1,10 @@
 From: HackerOS Linux System <hackeros068@gmail.com>
 Subject: [PATCH 30/35] hackeros: perf events bez uprawnien dla red team side-channel
 
-Konfiguruje perf_event_paranoid na wartosc umozliwiajaca red team
-side-channel research (Spectre/Meltdown analysis, cache-timing
-attacks, DRAM rowhammer timing) bez pelnego roota. Dostepne dla
-grupy hackeros-redteam z pelnym audytem.
+Konfiguruje targeted exemption perf_event_paranoid dla grupy
+hackeros-redteam umozliwiajacy side-channel research (Spectre/
+Meltdown analysis, cache-timing attacks, DRAM rowhammer timing)
+bez pelnego roota. System globalny pozostaje na paranoid=3.
 
 ---
  kernel/events/core.c | 20 ++++++++++++++++++++
@@ -12,10 +12,11 @@ grupy hackeros-redteam z pelnym audytem.
 
 --- a/kernel/events/core.c
 +++ b/kernel/events/core.c
-@@ -440,6 +440,26 @@
- int sysctl_perf_event_sample_rate	__read_mostly	= DEFAULT_MAX_SAMPLE_RATE;
- static int max_samples_per_tick		__read_mostly	= DIV_ROUND_UP(DEFAULT_MAX_SAMPLE_RATE, HZ);
+@@ -15446,3 +15446,23 @@
+ #endif /* CONFIG_CGROUP_PERF */
  
+ DEFINE_STATIC_CALL_RET0(perf_snapshot_branch_stack, perf_snapshot_branch_stack_t);
++
 +#ifdef CONFIG_HACKEROS_REDTEAM
 +/*
 + * HackerOS Red Team: rozszerzone perf events dla side-channel research.
