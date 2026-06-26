@@ -6,15 +6,16 @@ HackerOS Red Team Edition, uzywana przez modul red team do wlaczania
 domyslnych ustawien ofensywnych i narzedzi penetration testingu.
 
 ---
- init/Kconfig | 15 +++++++++++++++
- 1 file changed, 15 insertions(+)
+ init/Kconfig | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
 
 --- a/init/Kconfig
 +++ b/init/Kconfig
-@@ -2329,3 +2329,18 @@
- 	  HackerOS Kernel, jadra Linux dostarczanego z HackerOS
- 	  Cybersecurity Edition. Jesli nie wiesz co to jest, wybierz N.
+@@ -2329,3 +2329,17 @@
+ 	  cybersecurity dostarczanych w tej edycji HackerOS.
  
+ 	  Jesli nie wiesz co to jest, wybierz N.
++
 +config HACKEROS_REDTEAM
 +	bool "HackerOS Red Team Edition extensions"
 +	depends on HACKEROS_KERNEL
