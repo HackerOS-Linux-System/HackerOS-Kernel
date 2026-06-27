@@ -1,37 +1,27 @@
 From: HackerOS Linux System <hackeros068@gmail.com>
 Subject: [PATCH 35/35] hackeros: marker pelnego buildu sterownikow red team
 
-Dodaje znacznik w init/version.c potwierdzajacy ze jadro zostalo
-zbudowane z pelnym zestawem sterownikow red team (WiFi injection,
-USB gadget, Bluetooth HCI, pelne netfilter) - uzywany przez
-hackeros-redteam-check do weryfikacji gotowosci systemu.
+Znacznik w init/version.c potwierdzajacy pelny build red team:
+WiFi injection (0019), USB HID (0022), BT monitor (0028),
+NFQUEUE MITM (0029), perf side-channel (0030), OSTree (0031-0034).
 
 ---
- init/version.c | 20 ++++++++++++++++++++
- 1 file changed, 20 insertions(+)
+ init/version.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
 
 --- a/init/version.c
 +++ b/init/version.c
-@@ -52,3 +52,23 @@
+@@ -52,3 +52,14 @@
  #include "version-timestamp.c"
  
  EXPORT_SYMBOL_GPL(init_uts_ns);
 +
 +#ifdef CONFIG_HACKEROS_REDTEAM
-+/*
-+ * HackerOS Red Team Edition - marker pelnego buildu.
-+ *
-+ * Ta stala jest exportowana do przestrzeni uzytkownika przez
-+ * /proc/version_signature (HackerOS extension) i uzywana przez
-+ * hackeros-redteam-check do weryfikacji ze wszystkie wymagane
-+ * komponenty jadra sa dostepne przed uruchomieniem engagement.
-+ *
-+ * Checklist: WiFi injection (0019), USB HID (0022), BT monitor (0028),
-+ * NFQUEUE MITM (0029), perf side-channel (0030), OSTree (0031-0034).
-+ */
++/* HackerOS Red Team Edition - marker pelnego buildu.
++ * Eksportowany przez /proc/version_signature, uzywany przez
++ * hackeros-redteam-check do weryfikacji gotowosci systemu. */
 +static const char hackeros_redteam_build_marker[] __initconst =
 +	"HackerOS-RedTeam-Edition-v2";
-+
 +static const unsigned int hackeros_build_patch_count __initconst = 35;
 +static const unsigned int hackeros_build_ostree      __initconst = 1;
 +static const unsigned int hackeros_build_redteam     __initconst = 1;
