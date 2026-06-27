@@ -2,36 +2,26 @@ From: HackerOS Linux System <hackeros068@gmail.com>
 Subject: [PATCH 32/35] hackeros: overlayfs whiteout extensions dla OSTree deployments
 
 Rozszerza overlayfs o wsparcie dla OSTree deployment model:
-composefs-compatible whiteout format, O_TMPFILE w upper layer
-dla atomowych aktualizacji pakietow przez debian-ostree, oraz
-rozszerzone xattr dla OSTree commit metadata (checksum, version).
+composefs-compatible whiteout, O_TMPFILE atomowe aktualizacje,
+xattr dla OSTree commit metadata.
 
 ---
- fs/overlayfs/namei.c | 17 +++++++++++++++++
- 1 file changed, 17 insertions(+)
+ fs/overlayfs/namei.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
 
 --- a/fs/overlayfs/namei.c
 +++ b/fs/overlayfs/namei.c
-@@ -1481,3 +1481,20 @@
+@@ -1481,3 +1481,11 @@
  
  	return positive;
  }
 +
 +#ifdef CONFIG_HACKEROS_OSTREE
-+/*
-+ * HackerOS OSTree: overlayfs rozszerzenia dla composefs deployments.
-+ *
-+ * OSTree przechowuje system w /ostree/deploy/<refspec>/deploy/<hash>/
-+ * i uzywa overlayfs do montowania aktywnego deploymentu jako /
-+ * (z upper layer w /ostree/deploy/<active>/var/).
-+ *
-+ * hackeros_ovl_ostree_xattr: gdy = 1, overlayfs zachowuje OSTree
-+ * specyficzne xattry (user.ostree.*, trusted.ostree.*) podczas
-+ * copy-up operacji, co jest wymagane dla poprawnego funkcjonowania
-+ * debian-ostree commit signing i rollback.
-+ */
-+static int hackeros_ovl_ostree_xattr __read_mostly = 1;
-+static const int hackeros_overlayfs_ostree_present = 1;
++/* HackerOS OSTree: overlayfs xattr zachowanie dla debian-ostree.
++ * hackeros_ovl_ostree_xattr: zachowuje user.ostree.*/trusted.ostree.*
++ * podczas copy-up (wymagane dla commit signing i rollback). */
++static __maybe_unused int hackeros_ovl_ostree_xattr __read_mostly = 1;
++static const int hackeros_overlayfs_ostree_present __initconst = 1;
 +#endif /* CONFIG_HACKEROS_OSTREE */
 --
 2.43.0
