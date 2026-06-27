@@ -81,6 +81,19 @@ function Utils.shell_quote(s)
     return "'" .. tostring(s):gsub("'", "'\''") .. "'"
 end
 
+--- Zwraca absolutna sciezke dla podanego path (rozwiazuje wzgledem CWD).
+-- Uzywane do zamrozenia sciezek przed operacjami "cd" w subshellach.
+function Utils.abspath(path)
+    if path:sub(1, 1) == "/" then
+        return path  -- juz absolutna
+    end
+    -- Pobierz CWD przez pwd
+    local handle = io.popen("pwd", "r")
+    local cwd = handle and handle:read("*l") or "."
+    if handle then handle:close() end
+    return cwd .. "/" .. path
+end
+
 --- Wykonuje komende w shellu. Zwraca true/false + kod wyjscia.
 -- @param cmd string
 -- @param quiet boolean opcjonalnie wycisz output komendy
