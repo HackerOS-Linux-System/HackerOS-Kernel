@@ -1,40 +1,28 @@
 From: HackerOS Linux System <hackeros068@gmail.com>
 Subject: [PATCH 27/35] hackeros: dedykowany namespace red team dla izolacji narzedzi
 
-Dodaje wsparcie dla dedykowanego Red Team Namespace (RTN) -
-izolowanego srodowiska wykonywania narzedzi ofensywnych bez
-wplywu na system hosta. Wsparcie dla network namespace recycling
-(szybkie resetowanie sieci miedzy testami).
+Dodaje wsparcie dla Red Team Namespace (RTN): izolacja engagementow,
+net namespace recycling (reset sieci miedzy testami) i opcjonalny
+PID remap.
 
 ---
- kernel/nsproxy.c | 20 ++++++++++++++++++++
- 1 file changed, 20 insertions(+)
+ kernel/nsproxy.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
 
 --- a/kernel/nsproxy.c
 +++ b/kernel/nsproxy.c
-@@ -611,3 +611,23 @@
+@@ -611,3 +611,12 @@
  	nsproxy_cachep = KMEM_CACHE(nsproxy, SLAB_PANIC|SLAB_ACCOUNT);
  	return 0;
  }
 +
 +#ifdef CONFIG_HACKEROS_REDTEAM
-+/*
-+ * HackerOS Red Team Namespace (RTN):
-+ *
-+ * Rozszerza standardowe Linux namespaces o semantyke RTN uzywana
-+ * przez hackeros-redteam-manager (HRM) do izolacji engagementow:
-+ *
-+ * hackeros_rtn_net_recycle: gdy = 1, po opuszczeniu sieci namespace
-+ * przez ostatni proces, wszystkie ruly netfilter i routing sa
-+ * automatycznie resetowane (brak wycieku konfiguracji MITM
-+ * miedzy engagementami).
-+ *
-+ * hackeros_rtn_pid_remap: gdy = 1, procesy w RTN dostaja
-+ * remapowane PID zaczynajace od 1 (fake init).
-+ */
-+static int hackeros_rtn_net_recycle __read_mostly = 1;
-+static int hackeros_rtn_pid_remap   __read_mostly = 0;
-+static const int hackeros_redteam_namespace_present = 1;
++/* HackerOS Red Team Namespace (RTN): izolacja engagementow.
++ * hackeros_rtn_net_recycle: auto-reset netfilter/routing po zamknieciu RTN.
++ * hackeros_rtn_pid_remap: remapowanie PID od 1 wewnatrz RTN. */
++static __maybe_unused int hackeros_rtn_net_recycle __read_mostly = 1;
++static __maybe_unused int hackeros_rtn_pid_remap   __read_mostly = 0;
++static const int hackeros_redteam_namespace_present __initconst = 1;
 +#endif /* CONFIG_HACKEROS_REDTEAM */
 --
 2.43.0
