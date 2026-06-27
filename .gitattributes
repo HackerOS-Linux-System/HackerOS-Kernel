@@ -1,6 +1,10 @@
-*.conf linguist-detectable=true
-*.conf linguist-documentation=false
-*.conf linguist-language=KCONFIG
+*.config linguist-detectable=true
+*.config linguist-documentation=false
+*.config linguist-language=KCONFIG
+
+*.patch linguist-detectable=true
+*.patch linguist-documentation=false
+*.patch linguist-language=KCONFIG
 
 *.yml linguist-detectable=true
 *.yml linguist-documentation=false
