@@ -2,35 +2,25 @@ From: HackerOS Linux System <hackeros068@gmail.com>
 Subject: [PATCH 20/35] hackeros: PACKET_MMAP ring buffer rozszerzony dla red team
 
 Rozszerza AF_PACKET MMAP ring buffer (TPACKET_V3) o dodatkowe
-opcje wydajnosciowe dla narzedzi red team wymagajacych wysokiej
-przepustowosci: tcpdump, wireshark, scapy bulk capture.
-Zwiekszony domyslny rozmiar ring frame dla zminimalizowania
-strat pakietow podczas pelnego duplex packet capture.
+opcje wydajnosciowe dla narzedzi red team (tcpdump, wireshark, scapy).
+Zwiekszony rozmiar ring frame dla zminimalizowania strat pakietow.
 
 ---
- net/packet/af_packet.c | 15 +++++++++++++++
- 1 file changed, 15 insertions(+)
+ net/packet/af_packet.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
 
 --- a/net/packet/af_packet.c
 +++ b/net/packet/af_packet.c
-@@ -4817,3 +4817,18 @@
+@@ -4817,3 +4817,10 @@
  MODULE_DESCRIPTION("Packet socket support (AF_PACKET)");
  MODULE_LICENSE("GPL");
  MODULE_ALIAS_NETPROTO(PF_PACKET);
 +
 +#ifdef CONFIG_HACKEROS_REDTEAM
-+/*
-+ * HackerOS Red Team: rozszerzone parametry PACKET_MMAP dla
-+ * wysokowydajnego przechwytywania pakietow. Narzedzia takie jak
-+ * tcpdump -i any z TPACKET_V3 korzystaja z tych ustawien aby
-+ * zminimalizowac straty pakietow podczas intensywnego red team
-+ * engagement (np. full-duplex capture w srodowisku 10GbE).
-+ *
-+ * hackeros_packet_ring_frames: domyslna liczba klatek ring buffer.
-+ * Wartosc 4096 = kompromis miedzy unikaniem strat a ryzykiem OOM.
-+ */
-+static unsigned int hackeros_packet_ring_frames __read_mostly = 4096;
-+static const int hackeros_packet_mmap_redteam = 1;
++/* HackerOS Red Team: PACKET_MMAP ring buffer parametry dla high-perf capture.
++ * hackeros_packet_ring_frames: domyslna liczba klatek (4096 = ~256MB). */
++static __maybe_unused unsigned int hackeros_packet_ring_frames __read_mostly = 4096;
++static const int hackeros_packet_mmap_redteam __initconst = 1;
 +#endif /* CONFIG_HACKEROS_REDTEAM */
 --
 2.43.0
