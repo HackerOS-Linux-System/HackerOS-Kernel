@@ -6,13 +6,13 @@
 
 [metadata]
 -> name        => HackerOS Kernel
--> codename    => Shadowhawk
+-> codename    => cybersecurity
 -> branch      => cybersecurity
 -> maintainer  => HackerOS Linux System <hackeros068@gmail.com>
 -> homepage    => https://hackeros-linux-system.github.io/HackerOS-Website/
 -> license     => MPL-2.0
--> description => Zmodyfikowane jadro Linux dla HackerOS Red Team Edition (Cybersecurity)
--> edition     => Red Team
+-> description => Zmodyfikowane jadro Linux dla HackerOS Cybersecurity Edition
+-> edition     => Cybersecurity
 
 ! ---------------------------------------------------------------------------
 ! Zrodlo jadra (vanilla Linux). Build.lua sciaga ten tarball i nadpisuje go
@@ -21,11 +21,11 @@
 ! auto_latest=false: wersja KONTROLOWANA przez ten plik, nie auto-detekcja.
 ! ---------------------------------------------------------------------------
 [source]
--> base_version    => 7.1
+-> base_version    => "7.1"
 -> auto_latest     => false
 -> min_version     => 7.1
 -> mirror          => https://cdn.kernel.org/pub/linux/kernel/v${source.major}.x/
--> major           => 7
+-> major           => "7"
 -> tarball_pattern => linux-${source.base_version}.tar.xz
 -> sha_check       => true
 
