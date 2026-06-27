@@ -58,9 +58,20 @@ local function parse_scalar(raw)
     if lower == "true" then return true end
     if lower == "false" then return false end
 
-    -- number
-    if raw:match("^%-?%d+%.?%d*$") then
+    -- number (tylko czyste liczby calkowite lub zmiennoprzecinkowe BEZ kontekstu wersji)
+    -- Ciagi w formacie X.Y gdzie X i Y to liczby sa traktowane jako STRINGI (wersje jadra!).
+    -- Przyklad: "7.1" -> "7.1" (string, nie 7.1 float), "42" -> 42 (int OK).
+    if raw:match("^%-?%d+$") then
+        -- czysta liczba calkowita (np. "4", "512") -> number
         return tonumber(raw)
+    end
+    if raw:match("^%-?%d+%.%d+%.%d+") then
+        -- format X.Y.Z (wersja semantyczna) -> zawsze string
+        return raw
+    end
+    if raw:match("^%-?%d+%.%d+$") then
+        -- format X.Y (moze byc wersja jadra jak "7.1") -> string
+        return raw
     end
 
     -- plain string (bez cytowania)
