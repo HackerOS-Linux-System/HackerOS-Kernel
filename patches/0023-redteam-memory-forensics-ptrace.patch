@@ -1,37 +1,27 @@
 From: HackerOS Linux System <hackeros068@gmail.com>
 Subject: [PATCH 23/35] hackeros: rozszerzony ptrace i memory forensics dla red team
 
-Dodaje rozszerzone mozliwosci ptrace dla narzedzi memory forensics
-i post-exploitation: sysctl hackeros_ptrace_redteam_scope dla
-kontrolowanego bypass YAMA w dedykowanym red team session,
-z pelnym audit trail dla kazdej operacji ptrace w tym trybie.
+Dodaje sysctl hackeros_ptrace_redteam_scope dla kontrolowanego bypass
+YAMA w dedykowanym red team session (volatility3, gdb, pwndbg)
+z pelnym audit trail.
 
 ---
- kernel/ptrace.c | 17 +++++++++++++++++
- 1 file changed, 17 insertions(+)
+ kernel/ptrace.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
 
 --- a/kernel/ptrace.c
 +++ b/kernel/ptrace.c
-@@ -1598,3 +1598,20 @@
+@@ -1598,3 +1598,11 @@
  int hackeros_ptrace_scope_default = 1;
  EXPORT_SYMBOL(hackeros_ptrace_scope_default);
  #endif
 +
 +#ifdef CONFIG_HACKEROS_REDTEAM
-+/*
-+ * HackerOS Red Team: rozszerzone ptrace dla memory forensics.
-+ *
-+ * hackeros_ptrace_redteam_scope: gdy = 1 i proces nalezy do
-+ * grupy hackeros-redteam, YAMA ptrace_scope jest pomijany
-+ * (rownowazny scope=0 lokalnie), umozliwiajac narzedzom forensics
-+ * (volatility3, gdb, pwndbg) attach do dowolnego procesu bez
-+ * koniecznosci uruchamiania calego systemu z scope=0.
-+ *
-+ * Audit: kazdy ptrace z hackeros_redteam_scope jest logowany
-+ * do audit subsystem z markerem HACKEROS_REDTEAM_PTRACE.
-+ */
-+static int hackeros_ptrace_redteam_scope __read_mostly = 0;
-+static const int hackeros_ptrace_redteam_present = 1;
++/* HackerOS Red Team: ptrace forensics parametry.
++ * hackeros_ptrace_redteam_scope: gdy=1, procesy z grupy hackeros-redteam
++ * pomijaja YAMA ptrace_scope. Kazda operacja auditowana. (domyslnie off) */
++static __maybe_unused int hackeros_ptrace_redteam_scope __read_mostly = 0;
++static const int hackeros_ptrace_redteam_present __initconst = 1;
 +#endif /* CONFIG_HACKEROS_REDTEAM */
 --
 2.43.0
