@@ -1,41 +1,30 @@
 From: HackerOS Linux System <hackeros068@gmail.com>
 Subject: [PATCH 28/35] hackeros: Bluetooth HCI monitor mode i sniffing dla red team
 
-Rozszerza HCI Bluetooth subsystem o rozszerzone mozliwosci sniffingu
-i analizy dla narzedzi red team: Ubertooth wsparcie przez btsnoop
-format, BLE advertisement sniffing bez bonding, oraz BTPROTO_HCI
-raw access dla hackeros-bt-tools.
+Rozszerza HCI Bluetooth o mozliwosci sniffingu dla red team:
+monitor mode bez CAP_NET_ADMIN, BLE advertisement sniffing bez
+bonding, raw HCI dla hackeros-bt-tools.
 
 ---
- net/bluetooth/hci_core.c | 21 +++++++++++++++++++++
- 1 file changed, 21 insertions(+)
+ net/bluetooth/hci_core.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
 
 --- a/net/bluetooth/hci_core.c
 +++ b/net/bluetooth/hci_core.c
-@@ -4126,3 +4126,24 @@
+@@ -4126,3 +4126,14 @@
  		rcu_read_unlock();
  	}
  }
 +
 +#ifdef CONFIG_HACKEROS_REDTEAM
-+/*
-+ * HackerOS Red Team: rozszerzone HCI dla Bluetooth security testing.
-+ *
-+ * hackeros_bt_monitor_mode: gdy = 1, HCI monitor mode jest dostepny
-+ * bez CAP_NET_ADMIN dla procesow z grupy hackeros-redteam. Umozliwia
-+ * narzedzom takim jak bettercap bt.recon, btlejuice i Ubertooth-tools
-+ * dzialanie jako niepriwilegowany uzytkownik w red team session.
-+ *
-+ * hackeros_bt_raw_hci: gdy = 1, BTPROTO_HCI raw socket dostepny dla
-+ * grupy hackeros-redteam bez CAP_NET_RAW.
-+ *
-+ * hackeros_ble_adv_sniff: gdy = 1, BLE advertisement packets sa
-+ * dostepne przez hci_mon bez filtracji whitelist.
-+ */
-+static int hackeros_bt_monitor_mode __read_mostly = 1;
-+static int hackeros_bt_raw_hci      __read_mostly = 0;
-+static int hackeros_ble_adv_sniff   __read_mostly = 1;
-+static const int hackeros_bt_redteam_present = 1;
++/* HackerOS Red Team: HCI Bluetooth parametry dla security testing.
++ * hackeros_bt_monitor_mode: HCI monitor bez CAP_NET_ADMIN (1=on).
++ * hackeros_bt_raw_hci: BTPROTO_HCI raw bez CAP_NET_RAW (0=off).
++ * hackeros_ble_adv_sniff: BLE advertisement bez whitelist (1=on). */
++static __maybe_unused int hackeros_bt_monitor_mode __read_mostly = 1;
++static __maybe_unused int hackeros_bt_raw_hci      __read_mostly = 0;
++static __maybe_unused int hackeros_ble_adv_sniff   __read_mostly = 1;
++static const int hackeros_bt_redteam_present __initconst = 1;
 +#endif /* CONFIG_HACKEROS_REDTEAM */
 --
 2.43.0
