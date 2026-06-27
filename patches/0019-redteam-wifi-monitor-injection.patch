@@ -3,31 +3,24 @@ Subject: [PATCH 19/35] hackeros: WiFi monitor mode i packet injection dla red te
 
 Konfiguruje mac80211 o znacznik kompatybilnosci dla narzedzi WiFi
 red team (Alfa, rtl8812au, mt7612u, monitor mode, packet injection).
-Rozszerzenie wykrywane przez hackeros-wireless-tools do weryfikacji
-kompatybilnosci jadra przed uruchomieniem aircrack-ng/airodump-ng.
+Rozszerzenie wykrywane przez hackeros-wireless-tools.
 
 ---
- net/mac80211/main.c | 13 +++++++++++++
- 1 file changed, 13 insertions(+)
+ net/mac80211/main.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
 
 --- a/net/mac80211/main.c
 +++ b/net/mac80211/main.c
-@@ -1833,3 +1833,16 @@
+@@ -1833,3 +1833,10 @@
  
  MODULE_DESCRIPTION("IEEE 802.11 subsystem");
  MODULE_LICENSE("GPL");
 +
 +#ifdef CONFIG_HACKEROS_REDTEAM
-+/*
-+ * HackerOS Red Team: znacznik obecnosci rozszerzen wireless injection.
-+ * Uzywany przez hackeros-wireless-tools i airodump-ng do wykrycia
-+ * kompatybilnosci jadra z pelnym packet injection.
-+ * Monitor mode: NL80211_IFTYPE_MONITOR dostepny bez ograniczen.
-+ * Injection: ieee80211_tx_skb() akceptuje ramki z przestrzeni
-+ * uzytkownika przez AF_PACKET / nl80211 bez filtracji firmware.
-+ */
-+static const int hackeros_wifi_injection_present = 1;
-+static int hackeros_monitor_mode_default __read_mostly = 1;
++/* HackerOS Red Team: marker WiFi injection dla hackeros-wireless-tools.
++ * Wykrywany przez airodump-ng/aircrack-ng do weryfikacji kompatybilnosci. */
++static const int hackeros_wifi_injection_present __initconst = 1;
++static __maybe_unused int hackeros_monitor_mode_default __read_mostly = 1;
 +#endif /* CONFIG_HACKEROS_REDTEAM */
 --
 2.43.0
