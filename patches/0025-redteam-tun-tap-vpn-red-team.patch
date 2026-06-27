@@ -1,38 +1,28 @@
 From: HackerOS Linux System <hackeros068@gmail.com>
 Subject: [PATCH 25/35] hackeros: TUN/TAP rozszerzenia dla red team VPN i tunelowania
 
-Rozszerza TUN/TAP driver o wsparcie dla red team VPN i tunelowania:
-rozszerzone multi-queue TUN dla OpenVPN/WireGuard w duzych lab
-srodowiskach, wsparcie dla VXLAN/GENEVE tunelowania w C2 (command
-and control) sieciach, oraz znacznik dla hackeros-tunnel-tools.
+Rozszerza TUN/TAP driver o wsparcie dla red team C2 tunelowania:
+64 kolejki multiqueue dla OpenVPN/WireGuard, VXLAN offload dla
+C2 infrastructure (Cobalt Strike, Sliver, Havoc).
 
 ---
- drivers/net/tun.c | 18 ++++++++++++++++++
- 1 file changed, 18 insertions(+)
+ drivers/net/tun.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
 
 --- a/drivers/net/tun.c
 +++ b/drivers/net/tun.c
-@@ -3839,3 +3839,21 @@
+@@ -3839,3 +3839,12 @@
  MODULE_ALIAS_MISCDEV(TUN_MINOR);
  MODULE_ALIAS("devname:net/tun");
  MODULE_IMPORT_NS("NETDEV_INTERNAL");
 +
 +#ifdef CONFIG_HACKEROS_REDTEAM
-+/*
-+ * HackerOS Red Team: rozszerzone TUN/TAP dla C2 i VPN tunelowania.
-+ *
-+ * hackeros_tun_redteam_queues: maksymalna liczba kolejek multiqueue
-+ * TUN dla red team (domyslnie 64, vs upstream 16), umozliwiajac
-+ * skalowanie OpenVPN/WireGuard w duzych lab srodowiskach z wieloma
-+ * jednoczesnie aktywanymi tunelami C2.
-+ *
-+ * hackeros_tun_vxlan_offload: gdy = 1, wlacza GSO/TSO offload dla
-+ * VXLAN enkapsulowanych tuneli C2, redukujac CPU overhead podczas
-+ * duzego ruchu przez C2 infrastructure.
-+ */
-+static unsigned int hackeros_tun_redteam_queues __read_mostly = 64;
-+static int hackeros_tun_vxlan_offload           __read_mostly = 1;
-+static const int hackeros_tun_redteam_present = 1;
++/* HackerOS Red Team: TUN/TAP parametry dla C2 VPN tunelowania.
++ * hackeros_tun_redteam_queues: max kolejki multiqueue (64 vs upstream 16).
++ * hackeros_tun_vxlan_offload: GSO/TSO offload dla VXLAN C2 tuneli. */
++static __maybe_unused unsigned int hackeros_tun_redteam_queues __read_mostly = 64;
++static __maybe_unused int hackeros_tun_vxlan_offload           __read_mostly = 1;
++static const int hackeros_tun_redteam_present __initconst = 1;
 +#endif /* CONFIG_HACKEROS_REDTEAM */
 --
 2.43.0
