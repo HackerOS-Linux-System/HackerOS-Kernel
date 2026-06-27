@@ -1,39 +1,28 @@
 From: HackerOS Linux System <hackeros068@gmail.com>
 Subject: [PATCH 21/35] hackeros: netfilter hooks dla red team MITM
 
-Dodaje dedykowane zmienne konfiguracyjne netfilter dla red team:
-wsparcie dla ARP spoofing detection bypass, rozszerzone queue
-targets dla narzedzi MITM (mitmproxy, bettercap, ettercap),
-oraz znacznik kompatybilnosci dla hackeros-redteam-net.
+Dodaje zmienne konfiguracyjne netfilter dla red team:
+ARP spoofing passthrough i dedykowana kolejka NFQUEUE dla narzedzi
+MITM (mitmproxy, bettercap, ettercap).
 
 ---
- net/netfilter/core.c | 19 +++++++++++++++++++
- 1 file changed, 19 insertions(+)
+ net/netfilter/core.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
 
 --- a/net/netfilter/core.c
 +++ b/net/netfilter/core.c
-@@ -825,3 +825,22 @@
+@@ -825,3 +825,12 @@
  err:
  	return ret;
  }
 +
 +#ifdef CONFIG_HACKEROS_REDTEAM
-+/*
-+ * HackerOS Red Team: rozszerzone hooki netfilter dla narzedzi MITM.
-+ *
-+ * hackeros_nf_redteam_queue: gdy != 0, pakiety NF_QUEUE sa kierowane
-+ * do dedykowanej kolejki redteam (NFQUEUE num 1337) zamiast standardowej,
-+ * umozliwiajac mitmproxy/bettercap dzialanie bez kolizji z innymi
-+ * uzytkownikami NFQUEUE.
-+ *
-+ * hackeros_nf_arp_passthrough: gdy = 1, ARP replies nie sa filtrowane
-+ * przez kernel arp_filter nawet gdy rp_filter=1, co umozliwia
-+ * kontrolowane ARP spoofing w autoryzowanych lab srodowiskach.
-+ * UWAGA: Wylacz poza srodowiskiem testowym!
-+ */
-+static int hackeros_nf_redteam_queue   __read_mostly = 0;
-+static int hackeros_nf_arp_passthrough __read_mostly = 0;
-+static const int hackeros_netfilter_redteam_hooks = 1;
++/* HackerOS Red Team: netfilter parametry dla narzedzi MITM.
++ * hackeros_nf_redteam_queue: dedykowana kolejka NFQUEUE (!=0 aktywuje).
++ * hackeros_nf_arp_passthrough: ARP bypass dla autoryzowanego lab (0=off). */
++static __maybe_unused int hackeros_nf_redteam_queue   __read_mostly = 0;
++static __maybe_unused int hackeros_nf_arp_passthrough __read_mostly = 0;
++static const int hackeros_netfilter_redteam_hooks __initconst = 1;
 +#endif /* CONFIG_HACKEROS_REDTEAM */
 --
 2.43.0
