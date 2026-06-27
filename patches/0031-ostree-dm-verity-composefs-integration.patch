@@ -1,38 +1,27 @@
 From: HackerOS Linux System <hackeros068@gmail.com>
 Subject: [PATCH 31/35] hackeros: OSTree/composefs dm-verity integration dla immutable OS
 
-Dodaje wsparcie dla OSTree-based immutable filesystem stack:
 dm-verity z OSTree-compatible hash tree format (inline w composefs
-superblock), umozliwiajac debian-ostree weryfikacje integralnosci
+superblock). Umozliwia debian-ostree weryfikacje integralnosci
 kazdego deployment bez osobnego urzadzenia hash.
 
 ---
- drivers/md/dm-verity-target.c | 18 ++++++++++++++++++
- 1 file changed, 18 insertions(+)
+ drivers/md/dm-verity-target.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
 
 --- a/drivers/md/dm-verity-target.c
 +++ b/drivers/md/dm-verity-target.c
-@@ -1836,3 +1836,21 @@
+@@ -1836,3 +1836,11 @@
  MODULE_AUTHOR("Will Drewry <wad@chromium.org>");
  MODULE_DESCRIPTION(DM_NAME " target for transparent disk integrity checking");
  MODULE_LICENSE("GPL");
 +
 +#ifdef CONFIG_HACKEROS_OSTREE
-+/*
-+ * HackerOS OSTree Integration: dm-verity rozszerzenia dla immutable OS.
-+ *
-+ * OSTree uzywa dm-verity do weryfikacji integralnosci kazdego deployment.
-+ * Standardowy dm-verity wymaga pelnego hash tree w osobnej partycji;
-+ * OSTree przechowuje hash tree inline w composefs image (.cfs), co
-+ * wymaga rozszerzonego parsowania przez dm-verity target.
-+ *
-+ * hackeros_verity_ostree_mode: gdy = 1, dm-verity target akceptuje
-+ * OSTree-format hash tree (inline w composefs superblock) zamiast
-+ * wymagania osobnego hash device. Kompatybilne z debian-ostree i
-+ * rpm-ostree format hash tree v2.
-+ */
-+static int hackeros_verity_ostree_mode __read_mostly = 1;
-+static const int hackeros_ostree_verity_present = 1;
++/* HackerOS OSTree: dm-verity rozszerzenia dla immutable OS.
++ * hackeros_verity_ostree_mode: gdy=1, akceptuje OSTree-format hash tree
++ * (inline w composefs superblock zamiast osobnego hash device). */
++static __maybe_unused int hackeros_verity_ostree_mode __read_mostly = 1;
++static const int hackeros_ostree_verity_present __initconst = 1;
 +#endif /* CONFIG_HACKEROS_OSTREE */
 --
 2.43.0
