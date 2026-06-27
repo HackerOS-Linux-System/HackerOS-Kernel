@@ -62,40 +62,44 @@ function Compile.build_kernel(cfg, kernel_src_path)
         end
     end
 
-    local exitcode_file = build_cfg.log_dir .. "/make_exitcode.tmp"
-    local wrapper_file  = build_cfg.log_dir .. "/make_wrapper.sh"
+    local sq = Utils.shell_quote
+
+    -- Wyznacz absolutne sciezki przed jakimkolwiek cd.
+    -- Wrapper.sh robi "cd kernel_src_path" wiec relative paths
+    -- wskazalyby na drzewo zrodel jadra, nie katalog projektu.
+    local abs_log       = Utils.abspath(log_file)
+    local abs_exitcode  = Utils.abspath(build_cfg.log_dir .. "/make_exitcode.tmp")
+    local abs_wrapper   = Utils.abspath(build_cfg.log_dir .. "/make_wrapper.sh")
 
     Utils.mkdir_p(build_cfg.log_dir)
 
-    -- Generujemy tymczasowy skrypt powloki zamiast skomplikowanego shell-quoting
-    -- w string.format (eliminuje problemy z ' " \\ wewnatrz Lua string literalow).
-    local sq = Utils.shell_quote
+    -- Generujemy tymczasowy skrypt powloki zamiast skomplikowanego shell-quoting.
     local wrapper_lines = {
         "#!/bin/bash",
         "set -o pipefail 2>/dev/null || true",
         "cd " .. sq(kernel_src_path),
         ccache_prefix .. "make -j" .. tostring(jobs)
-            .. " bzImage modules 2>&1 | tee " .. sq(log_file),
+            .. " bzImage modules 2>&1 | tee " .. sq(abs_log),
         "MAKE_EXIT=${PIPESTATUS[0]:-$?}",
-        "echo ${MAKE_EXIT} > " .. sq(exitcode_file),
+        "echo ${MAKE_EXIT} > " .. sq(abs_exitcode),
         "exit ${MAKE_EXIT}",
     }
-    Utils.write_file(wrapper_file, table.concat(wrapper_lines, "\n") .. "\n")
-    os.execute("chmod +x " .. sq(wrapper_file))
+    Utils.write_file(abs_wrapper, table.concat(wrapper_lines, "\n") .. "\n")
+    os.execute("chmod +x " .. sq(abs_wrapper))
 
-    -- Uruchom wrapper; ignorujemy jego exit code bo czytamy z pliku
-    os.execute(sq(wrapper_file) .. " || true")
+    -- Uruchom wrapper; ignorujemy exit code bash-a, czytamy z pliku
+    os.execute(sq(abs_wrapper) .. " || true")
 
-    -- Odczytaj rzeczywisty exit code make z pliku
-    local ec_handle = io.open(exitcode_file, "r")
+    -- Odczytaj rzeczywisty exit code make z pliku (abs path)
+    local ec_handle = io.open(abs_exitcode, "r")
     local make_exitcode = 1
     if ec_handle then
         local raw = ec_handle:read("*l") or "1"
         make_exitcode = tonumber(raw:match("^%s*(%d+)")) or 1
         ec_handle:close()
-        os.remove(exitcode_file)
+        os.remove(abs_exitcode)
     end
-    os.remove(wrapper_file)
+    os.remove(abs_wrapper)
     if make_exitcode ~= 0 then
         Utils.die("Kompilacja jadra nie powiodla sie (exit "
             .. make_exitcode .. "). Log: " .. log_file)
