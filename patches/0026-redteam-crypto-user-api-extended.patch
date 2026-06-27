@@ -1,38 +1,26 @@
 From: HackerOS Linux System <hackeros068@gmail.com>
 Subject: [PATCH 26/35] hackeros: rozszerzony Crypto User API dla red team
 
-Rozszerza Crypto User API (AF_ALG) o dodatkowe algorytmy i tryby
-uzywane w narzedzia red team: rozszerzone AES tryby (GCM, CCM,
-XTS) dla full disk analysis, ChaCha20-Poly1305 dla C2 comms,
-oraz znacznik dla hackeros-crypto-tools (hashcat, john-the-ripper).
+Rozszerza AF_ALG o marker dostepnosci dla hackeros-crypto-tools:
+hashcat, john-the-ripper, narzedzia TLS/SSL analysis.
+Bitmask dostepnych algorytmow (ChaCha20, AES-XTS, SM4, Camellia).
 
 ---
- crypto/algif_hash.c | 18 ++++++++++++++++++
- 1 file changed, 18 insertions(+)
+ crypto/algif_hash.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
 
 --- a/crypto/algif_hash.c
 +++ b/crypto/algif_hash.c
-@@ -468,3 +468,21 @@
+@@ -468,3 +468,10 @@
  module_exit(algif_hash_exit);
  MODULE_DESCRIPTION("Userspace interface for hash algorithms");
  MODULE_LICENSE("GPL");
 +
 +#ifdef CONFIG_HACKEROS_REDTEAM
-+/*
-+ * HackerOS Red Team: rozszerzone AF_ALG crypto dla narzedzi kryptoanalizy.
-+ *
-+ * Dodaje marker dostepnosci dla hackeros-crypto-tools: hashcat (GPU
-+ * accelerated), john-the-ripper z OpenCL backend, oraz narzedzia
-+ * TLS/SSL analysis.
-+ *
-+ * hackeros_crypto_redteam_algos: bitmask dostepnych algorytmow
-+ * bit 0: ChaCha20-Poly1305 (C2 communications)
-+ * bit 1: AES-XTS (disk forensics)
-+ * bit 2: SM4 (Chinese standards - geopolitical red team)
-+ * bit 3: Camellia (alternate cipher red team)
-+ */
-+static unsigned int hackeros_crypto_redteam_algos __read_mostly = 0xF;
-+static const int hackeros_crypto_redteam_present = 1;
++/* HackerOS Red Team: AF_ALG crypto marker dla narzedzi kryptoanalizy.
++ * bit0=ChaCha20-Poly1305, bit1=AES-XTS, bit2=SM4, bit3=Camellia */
++static __maybe_unused unsigned int hackeros_crypto_redteam_algos __read_mostly = 0xF;
++static const int hackeros_crypto_redteam_present __initconst = 1;
 +#endif /* CONFIG_HACKEROS_REDTEAM */
 --
 2.43.0
