@@ -3,32 +3,24 @@ Subject: [PATCH 18/35] hackeros: raw socket sysctl dla red team
 
 Dodaje sysctl hackeros_redteam_raw_mode umozliwiajacy kontrolowane
 przydzielanie uprawnien raw socket dla narzedzi penetration testowych
-(scapy, hping3, nmap SYN scan) bez wymuszania full root. Domyslnie
-wylaczone (wartosc 0 = standard kernel behaviour).
+(scapy, hping3, nmap SYN scan) bez wymuszania full root.
 
 ---
- net/ipv4/raw.c | 14 ++++++++++++++
- 1 file changed, 14 insertions(+)
+ net/ipv4/raw.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
 
 --- a/net/ipv4/raw.c
 +++ b/net/ipv4/raw.c
-@@ -1118,3 +1118,17 @@
+@@ -1118,3 +1118,10 @@
  	if (register_pernet_subsys(&raw_sysctl_ops))
  		panic("RAW: failed to init sysctl parameters.\n");
  }
 +
 +#ifdef CONFIG_HACKEROS_REDTEAM
-+/*
-+ * HackerOS Red Team: sysctl kontrolujacy politike raw socket
-+ * dla narzedzi penetration testowych. Wartosc 0 = standard kernel
-+ * behaviour (CAP_NET_RAW wymagany). Wartosc 1 = red team mode:
-+ * procesy z grupy hackeros-redteam moga otwierac raw sockety bez
-+ * pelnego CAP_NET_RAW. Domyslnie wylaczone (bezpieczny default).
-+ */
-+int hackeros_redteam_raw_socket_mode __read_mostly = 0;
++/* HackerOS Red Team: raw socket mode dla grup red team.
++ * 0=standard (CAP_NET_RAW wymagany), 1=red team mode (GID-based). */
++int __maybe_unused hackeros_redteam_raw_socket_mode __read_mostly = 0;
 +EXPORT_SYMBOL_GPL(hackeros_redteam_raw_socket_mode);
-+
-+static const int hackeros_redteam_raw_hooks_present = 1;
 +#endif /* CONFIG_HACKEROS_REDTEAM */
 --
 2.43.0
