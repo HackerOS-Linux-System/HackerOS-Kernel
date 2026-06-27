@@ -387,9 +387,16 @@ jobs:
             VERSION_ARG="--version=${{ github.event.inputs.kernel_version }}"
           fi
           export CCACHE_DIR=~/.ccache
+          # Optymalizacje czasu kompilacji:
+          # -O2 zamiast -Os (szybsza kompilacja, lepszy kod)
+          # -pipe: unikaj plikow tymczasowych (szybsze I/O)
+          # --param=ggc-min-heapsize: zmniejsz GC GCC (szybszy kompilator)
+          export KCFLAGS="-O2 -pipe --param=ggc-min-heapsize=131072"
+          export KCPPFLAGS="-O2 -pipe"
           lua build.lua --keep-going --jobs=$(nproc) $VERSION_ARG
         env:
           TERM: dumb
+          MAKEFLAGS: "-j$(nproc) --output-sync=recurse"
 
       - name: Show ccache stats
         if: always()
