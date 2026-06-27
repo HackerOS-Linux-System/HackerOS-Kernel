@@ -1,41 +1,30 @@
 From: HackerOS Linux System <hackeros068@gmail.com>
 Subject: [PATCH 34/35] hackeros: sysctl API dla debian-ostree package manager
 
-Dodaje /proc/sys/kernel/hackeros_ostree_* sysctl interface uzywany
-przez debian-ostree (odpowiednik rpm-ostree dla Debiana) do komunikacji
-z jadrem: aktywny deployment mode, atomic switch trigger,
-oraz weryfikacja integralnosci composefs layerow.
+Dodaje /proc/sys/kernel/hackeros_ostree_* sysctl interface dla
+debian-ostree: aktywny deployment mode, atomic switch trigger,
+weryfikacja composefs layerow.
 
 ---
- kernel/sysctl.c | 21 +++++++++++++++++++++
- 1 file changed, 21 insertions(+)
+ kernel/sysctl.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
 
 --- a/kernel/sysctl.c
 +++ b/kernel/sysctl.c
-@@ -1436,3 +1436,24 @@
+@@ -1436,3 +1436,14 @@
  EXPORT_SYMBOL(proc_dostring);
  EXPORT_SYMBOL(proc_doulongvec_minmax);
  EXPORT_SYMBOL(proc_do_large_bitmap);
 +
 +#ifdef CONFIG_HACKEROS_OSTREE
-+/*
-+ * HackerOS OSTree sysctl API: /proc/sys/kernel/hackeros_ostree_*
-+ *
-+ * Interface dla debian-ostree package manager:
-+ *
-+ * hackeros_ostree_active: readonly, aktualnie aktywny OSTree deployment
-+ * mode (0=normalny, 1=ostree-managed immutable, 2=recovery).
-+ * Uzywany przez debian-ostree status i hackeros-info.
-+ *
-+ * hackeros_ostree_atomic_pending: readwrite, zapis 1 trigguje
-+ * atomowe przygotowanie do przelaeczenia przy nastepnym reboot
-+ * (przez ostree-grub2). Czytany przez grub2 OSTree plugin.
-+ *
-+ * Implementacja glowna w debian-ostree kmod.
-+ */
-+static int hackeros_ostree_active         __read_mostly = 0;
-+static int hackeros_ostree_atomic_pending __read_mostly = 0;
-+static const int hackeros_ostree_sysctl_present = 1;
++/* HackerOS OSTree sysctl API dla debian-ostree package manager.
++ * hackeros_ostree_active: readonly, aktywny deployment mode
++ *   (0=normalny, 1=ostree-managed immutable, 2=recovery).
++ * hackeros_ostree_atomic_pending: rw, zapis 1 trigguje atomowy
++ *   switch przy nastepnym reboot (przez ostree-grub2). */
++static __maybe_unused int hackeros_ostree_active         __read_mostly = 0;
++static __maybe_unused int hackeros_ostree_atomic_pending __read_mostly = 0;
++static const int hackeros_ostree_sysctl_present __initconst = 1;
 +#endif /* CONFIG_HACKEROS_OSTREE */
 --
 2.43.0
