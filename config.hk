@@ -21,9 +21,9 @@
 ! auto_latest=false: wersja KONTROLOWANA przez ten plik, nie auto-detekcja.
 ! ---------------------------------------------------------------------------
 [source]
--> base_version    => "7.1"
+-> base_version    => "7.2"
 -> auto_latest     => false
--> min_version     => 7.1
+-> min_version     => 7.2
 -> mirror          => https://cdn.kernel.org/pub/linux/kernel/v${source.major}.x/
 -> major           => "7"
 -> tarball_pattern => linux-${source.base_version}.tar.xz
